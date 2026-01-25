@@ -1,0 +1,79 @@
+services:
+  backend:
+    build: .
+    container_name: union_ganadera_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/union_ganadera
+      - SECRET_KEY=supersecretkey
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_BUCKET_NAME=documentos
+      - S3_ENDPOINT_URL=http://localstack:4566
+    depends_on:
+      - db
+      - localstack
+    networks:
+      - union_net
+
+  db:
+    image: postgres:15
+    container_name: union_ganadera_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=union_ganadera
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db_schema.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - union_net
+
+  localstack:
+    image: localstack/localstack
+    container_name: union_ganadera_s3
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - ./init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
+    networks:
+      - union_net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: union_ganadera_pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - union_net
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+  localstack_data:
+  pgadmin_data:
+
+
+networks:
+  union_net:
+    driver: bridge
