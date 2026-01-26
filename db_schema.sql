@@ -9,7 +9,7 @@ CREATE TYPE sexo_enum AS ENUM ('M', 'F', 'X');
 CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'admin', 'ban');
 
 -- Enum for document types
-CREATE TYPE doc_type_enum AS ENUM ('identificacion', 'comprobante_domicilio','predio', 'cedula_veterinario', 'otro');
+CREATE TYPE doc_type_enum AS ENUM ('identificacion', 'comprobante_domicilio','predio', 'cedula_veterinario','nariz', 'otro');
 
 -- 2. BASE TABLES
 -- ---------------------------------------------------------
@@ -82,10 +82,13 @@ CREATE TABLE bovinos (
 
     arete_barcode VARCHAR(50) UNIQUE,
     arete_rfid VARCHAR(50) UNIQUE,
+    nariz_storage_key TEXT UNIQUE,
 
     madre_id UUID REFERENCES bovinos(id),
     padre_id UUID REFERENCES bovinos(id),
     usuario_original_id UUID REFERENCES usuarios(id),
+
+    nombre VARCHAR(50),
 
     raza_dominante VARCHAR(50),
     fecha_nac DATE,

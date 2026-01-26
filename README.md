@@ -131,8 +131,12 @@ docker-compose down -v
 ### Gestión de Ganado (Bovinos)
 - CRUD completo de registros de ganado
 - Identificación con arete (código de barras y RFID)
+- Nombre personalizado para cada animal
+- Fotografía de nariz para identificación biométrica (almacenada en S3)
 - Seguimiento de peso, raza, propósito y estado
 - Relaciones de parentesco (padre/madre)
+- Registro de propietario original (usuario_original_id)
+- Asignación a predios específicos
 
 ### Sistema de Eventos
 Motor de eventos dinámico con llamadas a procedimientos almacenados para:
@@ -210,13 +214,54 @@ Motor de eventos dinámico con llamadas a procedimientos almacenados para:
 
 ```json
 {
+  "nombre": "Torito",
   "arete_barcode": "MX123456",
+  "arete_rfid": "RFID001122",
+  "madre_id": "uuid-madre",
+  "padre_id": "uuid-padre",
+  "predio_id": "uuid-predio",
   "raza_dominante": "Angus",
   "sexo": "M",
   "peso_nac": 35.5,
-  "fecha_nac": "2023-03-15"
+  "peso_actual": 450.0,
+  "fecha_nac": "2023-03-15",
+  "proposito": "Engorda"
 }
 ```
+
+**Campos Automáticos:**
+- `usuario_id`: Se establece automáticamente al usuario autenticado
+- `usuario_original_id`: Se establece automáticamente al usuario que registra el bovino y **nunca cambia**, incluso si el bovino es vendido
+- Estos campos NO deben incluirse en el cuerpo de la petición
+
+*Nota: Todos los demás campos son opcionales.*
+
+**Actualizar información de un animal**
+
+`PUT /bovinos/{bovino_id}`
+
+```json
+{
+  "nombre": "Torito Jr.",
+  "peso_actual": 475.5,
+  "proposito": "Reproducción"
+}
+```
+
+**Campos Protegidos (NO se pueden actualizar via PUT):**
+- `usuario_id` - Solo cambia mediante eventos de compraventa (trigger de base de datos)
+- `usuario_original_id` - Inmutable, nunca cambia
+- `nariz_storage_key` - Solo se actualiza mediante `POST /bovinos/{id}/upload-nose-photo`
+- `id`, `status` - Campos gestionados por el sistema
+
+**Subir foto de nariz**
+
+`POST /bovinos/{bovino_id}/upload-nose-photo`
+
+- **Content-Type:** `multipart/form-data`
+- **Parámetro:** `file` - Archivo de imagen (JPG, PNG, etc.)
+
+La foto se almacena en: `{user_id}/nariz/{bovino_id}/{uuid}.{extension}`
 
 **Actualizar datos del animal**
 
@@ -224,6 +269,7 @@ Motor de eventos dinámico con llamadas a procedimientos almacenados para:
 
 ```json
 {
+  "nombre": "Torito Jr.",
   "peso_actual": 450.5
 }
 ```
@@ -353,6 +399,7 @@ backend_api/
 | POST | `/login` | Iniciar sesión |
 | GET | `/users/me` | Obtener usuario actual |
 | GET/POST/PUT/DELETE | `/bovinos/` | CRUD de ganado |
+| POST | `/bovinos/{id}/upload-nose-photo` | Subir foto de nariz del bovino |
 | POST | `/eventos/` | Crear evento |
 | GET | `/eventos/{tipo}/` | Consultar eventos por tipo |
 | POST | `/files/upload` | Subir documento |

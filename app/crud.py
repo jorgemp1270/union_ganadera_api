@@ -50,7 +50,7 @@ def get_bovino(db: Session, bovino_id: str):
     return db.query(models.Bovino).filter(models.Bovino.id == bovino_id).first()
 
 def create_bovino(db: Session, bovino: schemas.BovinoCreate, user_id: str):
-    db_bovino = models.Bovino(**bovino.dict(), usuario_id=user_id)
+    db_bovino = models.Bovino(**bovino.dict(), usuario_id=user_id, usuario_original_id=user_id)
     db.add(db_bovino)
     db.commit()
     db.refresh(db_bovino)

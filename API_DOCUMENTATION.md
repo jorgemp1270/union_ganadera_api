@@ -190,8 +190,12 @@ All endpoints require authentication.
 **Request Body:**
 ```json
 {
+  "nombre": "Torito",
   "arete_barcode": "MX123456789",
   "arete_rfid": "RFID001122",
+  "madre_id": "uuid-madre",
+  "padre_id": "uuid-padre",
+  "predio_id": "uuid-predio",
   "raza_dominante": "Angus",
   "fecha_nac": "2023-03-15",
   "sexo": "M",
@@ -201,13 +205,25 @@ All endpoints require authentication.
 }
 ```
 
+**Important Notes:**
+- The `usuario_id` field is automatically set to the authenticated user
+- The `usuario_original_id` field is automatically set to the authenticated user and never changes
+- These fields should NOT be included in the request body as they are set server-side
+- After a sale (compraventa), `usuario_id` changes to the buyer, but `usuario_original_id` remains unchanged
+
 **Response:** `200 OK`
 ```json
 {
   "id": "b7d3a8e9-1234-5678-9abc-def012345678",
   "usuario_id": "550e8400-e29b-41d4-a716-446655440000",
+  "usuario_original_id": "550e8400-e29b-41d4-a716-446655440000",
+  "nombre": "Torito",
   "arete_barcode": "MX123456789",
   "arete_rfid": "RFID001122",
+  "nariz_storage_key": null,
+  "madre_id": "uuid-madre",
+  "padre_id": "uuid-padre",
+  "predio_id": "uuid-predio",
   "raza_dominante": "Angus",
   "fecha_nac": "2023-03-15",
   "sexo": "M",
@@ -222,10 +238,44 @@ All endpoints require authentication.
 - All fields are optional
 - `sexo`: enum: "M", "F", "X"
 - `arete_barcode`, `arete_rfid`: Must be unique if provided
+- `nombre`: Optional name for the animal
+- **`usuario_original_id`:** Automatically set to the authenticated user's ID who creates the bovino. This field cannot be modified and permanently tracks the original registrant, even if ownership is transferred via sale.
+- **`usuario_id`:** Initially set to the authenticated user's ID. This field changes when the bovino is sold (compraventa event).
 
 ---
 
-### 4. Update Cattle
+### 4. Upload Nose Photo
+
+**Endpoint:** `POST /bovinos/{bovino_id}/upload-nose-photo`
+
+**Headers:**
+- `Authorization: Bearer {token}`
+- `Content-Type: multipart/form-data`
+
+**Form Data:**
+- `file`: Image file (JPG, PNG, etc.)
+
+**Response:** `200 OK`
+```json
+{
+  "id": "b7d3a8e9-1234-5678-9abc-def012345678",
+  "usuario_id": "550e8400-e29b-41d4-a716-446655440000",
+  "usuario_original_id": "550e8400-e29b-41d4-a716-446655440000",
+  "nombre": "Torito",
+  "nariz_storage_key": "550e8400-e29b-41d4-a716-446655440000/nariz/b7d3a8e9-1234-5678-9abc-def012345678/a1b2c3d4-uuid.jpg",
+  "arete_barcode": "MX123456789",
+  "raza_dominante": "Angus",
+  "status": "activo"
+}
+```
+
+**Storage Path:** `{user_id}/nariz/{bovino_id}/{uuid}.{extension}`
+
+**Note:** Only the current owner can upload a nose photo for their bovino.
+
+---
+
+### 5. Update Cattle
 
 **Endpoint:** `PUT /bovinos/{bovino_id}`
 
@@ -234,10 +284,23 @@ All endpoints require authentication.
 **Request Body:** (Partial update supported)
 ```json
 {
+  "nombre": "Torito Jr.",
   "peso_actual": 475.5,
   "proposito": "Reproducción"
 }
 ```
+
+**Updatable Fields:**
+- `arete_barcode`, `arete_rfid`, `nombre`
+- `madre_id`, `padre_id`, `predio_id`
+- `raza_dominante`, `fecha_nac`, `sexo`
+- `peso_nac`, `peso_actual`, `proposito`
+
+**Protected Fields (cannot be updated via PUT):**
+- `usuario_id` - Only changes through compraventa events (database trigger)
+- `usuario_original_id` - Immutable, never changes
+- `nariz_storage_key` - Only updated via POST `/bovinos/{id}/upload-nose-photo`
+- `id`, `status` - System-managed fields
 
 **Response:** `200 OK` (Returns updated bovino object)
 
@@ -250,7 +313,7 @@ All endpoints require authentication.
 
 ---
 
-### 4. Delete Cattle
+### 6. Delete Cattle
 
 **Endpoint:** `DELETE /bovinos/{bovino_id}`
 

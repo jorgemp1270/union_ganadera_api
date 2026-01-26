@@ -34,7 +34,7 @@ class Usuario(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     datos = relationship("DatosUsuario", back_populates="usuario_rel", uselist=False)
-    bovinos = relationship("Bovino", back_populates="usuario")
+    bovinos = relationship("Bovino", back_populates="usuario", foreign_keys="[Bovino.usuario_id]")
     documentos = relationship("Documento", back_populates="usuario")
     domicilios = relationship("Domicilio", back_populates="usuario")
 
@@ -77,9 +77,13 @@ class Bovino(Base):
 
     arete_barcode = Column(String, unique=True)
     arete_rfid = Column(String, unique=True)
+    nariz_storage_key = Column(String, unique=True, nullable=True)
 
     madre_id = Column(UUID(as_uuid=True), ForeignKey("bovinos.id"), nullable=True)
     padre_id = Column(UUID(as_uuid=True), ForeignKey("bovinos.id"), nullable=True)
+    usuario_original_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+
+    nombre = Column(String, nullable=True)
 
     raza_dominante = Column(String)
     fecha_nac = Column(Date)
@@ -90,7 +94,7 @@ class Bovino(Base):
     proposito = Column(String)
     status = Column(String, default="activo")
 
-    usuario = relationship("Usuario", back_populates="bovinos")
+    usuario = relationship("Usuario", back_populates="bovinos", foreign_keys=[usuario_id])
     eventos = relationship("Evento", back_populates="bovino")
     predio = relationship("Predio", back_populates="bovinos")
 

@@ -58,6 +58,10 @@ class Token(BaseModel):
 class BovinoBase(BaseModel):
     arete_barcode: Optional[str] = None
     arete_rfid: Optional[str] = None
+    nombre: Optional[str] = None
+    madre_id: Optional[UUID] = None
+    padre_id: Optional[UUID] = None
+    predio_id: Optional[UUID] = None
     raza_dominante: Optional[str] = None
     fecha_nac: Optional[date] = None
     sexo: Optional[SexoEnum] = None
@@ -68,9 +72,26 @@ class BovinoBase(BaseModel):
 class BovinoCreate(BovinoBase):
     pass
 
+class BovinoUpdate(BaseModel):
+    # Only allow updating user-modifiable fields
+    arete_barcode: Optional[str] = None
+    arete_rfid: Optional[str] = None
+    nombre: Optional[str] = None
+    madre_id: Optional[UUID] = None
+    padre_id: Optional[UUID] = None
+    predio_id: Optional[UUID] = None
+    raza_dominante: Optional[str] = None
+    fecha_nac: Optional[date] = None
+    sexo: Optional[SexoEnum] = None
+    peso_nac: Optional[float] = None
+    peso_actual: Optional[float] = None
+    proposito: Optional[str] = None
+
 class BovinoResponse(BovinoBase):
     id: UUID
     usuario_id: UUID
+    usuario_original_id: Optional[UUID] = None
+    nariz_storage_key: Optional[str] = None
     status: str
 
     class Config:
