@@ -633,22 +633,6 @@ El esquema se inicializa automáticamente al arrancar el contenedor usando `db_s
 2. Elimina el volumen de la base de datos: `docker-compose down -v`
 3. Reinicia los servicios: `docker-compose up --build`
 
-## 🤝 Contribución
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📝 Licencia
-
-Este proyecto es privado y confidencial.
-
-## 📧 Contacto
-
-Para preguntas o soporte, contacta al equipo de desarrollo.
-
 ---
 
 **Nota:** Este proyecto usa LocalStack para emular AWS S3 en desarrollo. Para producción, configura credenciales reales de AWS S3.
