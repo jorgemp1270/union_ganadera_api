@@ -2,6 +2,12 @@
 
 Sistema backend para la gestión del sistema de Unión Ganadera. Esta API está construida con FastAPI y proporciona endpoints RESTful para la administración de usuarios, ganado bovino, eventos y documentos.
 
+## 🔗 Repositorios
+
+Este proyecto es parte de un ecosistema más grande. Revisa los otros repositorios de sus componentes:
+
+- **Flutter App**: [union_ganadera_app](https://github.com/jorgemp1270/union_ganadera_app)
+
 ## 📋 Descripción del Proyecto
 
 Este proyecto es un sistema completo de gestión ganadera que permite a los usuarios registrar y gestionar su ganado bovino, realizar seguimiento de eventos (vacunaciones, pesajes, tratamientos, etc.), administrar documentos y realizar transacciones de compra-venta. El sistema cuenta con autenticación JWT, almacenamiento de archivos en S3, y una arquitectura basada en microservicios con Docker.
