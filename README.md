@@ -16,6 +16,201 @@ Este proyecto es un sistema completo de gestión ganadera que permite a los usua
 - **Autenticación:** JWT (JSON Web Tokens)
 - **Administración de BD:** pgAdmin 4
 
+## 🏗️ Arquitectura del Sistema
+
+### Arquitectura de Microservicios
+
+```mermaid
+graph TB
+    subgraph "Cliente"
+        Client[Cliente HTTP/Browser]
+    end
+    
+    subgraph "Docker Compose - Backend Services"
+        subgraph "API Layer"
+            FastAPI[FastAPI Backend<br/>Puerto 8000]
+        end
+        
+        subgraph "Routers"
+            Users[users.py<br/>Autenticación]
+            Bovinos[bovinos.py<br/>Gestión Ganado]
+            EventosMain[eventos_main.py<br/>Crear Eventos]
+            Files[files.py<br/>Documentos]
+            Domicilios[domicilios.py<br/>Direcciones]
+            Predios[predios.py<br/>Propiedades]
+            
+            subgraph "Eventos Routers"
+                Pesos[pesos.py]
+                Vacunas[vacunaciones.py]
+                Dietas[dietas.py]
+                Otros[+ 6 routers más]
+            end
+        end
+        
+        subgraph "Core Modules"
+            Auth[auth.py<br/>JWT + bcrypt]
+            CRUD[crud.py<br/>DB Operations]
+            Models[models.py<br/>SQLAlchemy ORM]
+            Schemas[schemas.py<br/>Pydantic Validation]
+        end
+        
+        subgraph "Data Layer"
+            PostgreSQL[(PostgreSQL 15<br/>Puerto 5432)]
+            S3[LocalStack S3<br/>Puerto 4566]
+        end
+        
+        subgraph "Admin Tools"
+            pgAdmin[pgAdmin 4<br/>Puerto 5050]
+        end
+    end
+    
+    Client -->|HTTP/REST| FastAPI
+    
+    FastAPI --> Users
+    FastAPI --> Bovinos
+    FastAPI --> EventosMain
+    FastAPI --> Files
+    FastAPI --> Domicilios
+    FastAPI --> Predios
+    FastAPI --> Pesos
+    FastAPI --> Vacunas
+    FastAPI --> Dietas
+    FastAPI --> Otros
+    
+    Users --> Auth
+    Users --> CRUD
+    Bovinos --> Auth
+    Bovinos --> CRUD
+    Bovinos --> S3
+    EventosMain --> Auth
+    EventosMain --> CRUD
+    Files --> Auth
+    Files --> S3
+    Domicilios --> CRUD
+    Predios --> CRUD
+    Pesos --> CRUD
+    Vacunas --> CRUD
+    Dietas --> CRUD
+    Otros --> CRUD
+    
+    Auth --> Schemas
+    CRUD --> Models
+    Models --> PostgreSQL
+    
+    pgAdmin -.->|Administración| PostgreSQL
+    
+    style FastAPI fill:#009688,color:#fff
+    style PostgreSQL fill:#336791,color:#fff
+    style S3 fill:#FF9900,color:#fff
+    style Auth fill:#FFC107,color:#000
+    style pgAdmin fill:#336791,color:#fff
+```
+
+### Flujo de Autenticación
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant API as FastAPI
+    participant Auth as auth.py
+    participant DB as PostgreSQL
+    
+    C->>API: POST /signup (CURP + datos)
+    API->>Auth: Hash contraseña (bcrypt)
+    Auth->>DB: Crear usuario
+    DB-->>API: Usuario creado
+    API-->>C: 200 OK
+    
+    C->>API: POST /login (CURP + contraseña)
+    API->>DB: Buscar usuario por CURP
+    DB-->>API: Datos usuario
+    API->>Auth: Verificar contraseña hash
+    Auth->>Auth: Generar JWT token
+    Auth-->>API: access_token
+    API-->>C: {access_token, token_type}
+    
+    C->>API: GET /bovinos (Header: Bearer token)
+    API->>Auth: Validar JWT token
+    Auth-->>API: Usuario autenticado
+    API->>DB: Query bovinos del usuario
+    DB-->>API: Lista bovinos
+    API-->>C: 200 OK + datos
+```
+
+### Flujo de Eventos (Sistema de Eventos Dinámico)
+
+```mermaid
+flowchart LR
+    Client[Cliente] -->|POST /eventos/| Router[eventos_main.py]
+    Router -->|Validar| Schema[Pydantic Schema]
+    Schema -->|type + data| CRUD[crud.py]
+    
+    CRUD -->|type='peso'| SP1[registrar_peso<br/>Stored Procedure]
+    CRUD -->|type='vacunacion'| SP2[registrar_vacunacion<br/>Stored Procedure]
+    CRUD -->|type='compraventa'| SP3[registrar_compraventa<br/>Stored Procedure]
+    CRUD -->|type='...'| SPX[+ 6 procedimientos<br/>más]
+    
+    SP1 --> DB[(PostgreSQL)]
+    SP2 --> DB
+    SP3 --> DB
+    SPX --> DB
+    
+    DB -->|Trigger| T1[update_cow_current_weight]
+    DB -->|Trigger| T2[handle_compraventa_transfer]
+    
+    DB -->|Response| CRUD
+    CRUD -->|Evento creado| Client
+    
+    style SP1 fill:#4CAF50,color:#fff
+    style SP2 fill:#4CAF50,color:#fff
+    style SP3 fill:#4CAF50,color:#fff
+    style SPX fill:#4CAF50,color:#fff
+    style T1 fill:#FF5722,color:#fff
+    style T2 fill:#FF5722,color:#fff
+```
+
+### Almacenamiento de Archivos (S3)
+
+```mermaid
+graph LR
+    Client[Cliente] -->|POST /files/upload| FilesRouter[files.py]
+    Client -->|POST /bovinos/:id/upload-nose-photo| BovinosRouter[bovinos.py]
+    
+    FilesRouter -->|1. Validar auth| Auth[JWT Auth]
+    BovinosRouter -->|1. Validar auth| Auth
+    
+    FilesRouter -->|2. Upload| S3[LocalStack S3]
+    BovinosRouter -->|2. Upload| S3
+    
+    S3 -->|Storage Key| Pattern1["{user_id}/{doc_type}/{uuid}.ext"]
+    S3 -->|Storage Key| Pattern2["{user_id}/nariz/{bovino_id}/{uuid}.ext"]
+    
+    FilesRouter -->|3. Save metadata| DB[(PostgreSQL)]
+    BovinosRouter -->|3. Update nariz_storage_key| DB
+    
+    DB -->|4. Response| FilesRouter
+    DB -->|4. Response| BovinosRouter
+    
+    FilesRouter -->|GET /files/| Presigned[Generar URL<br/>Presignada 1h]
+    Presigned -->|Download URL| Client
+    
+    style S3 fill:#FF9900,color:#fff
+    style DB fill:#336791,color:#fff
+```
+
+### Esquema de Base de Datos
+
+<p align="center">
+  <img src=".resources/img/db_schema.png" width="100%" alt="Database Schema" />
+</p>
+
+El esquema completo incluye:
+- **Tablas principales:** usuarios, bovinos, eventos, documentos, domicilios, predios
+- **Tablas de eventos:** pesos, dietas, vacunaciones, desparasitaciones, laboratorios, compraventas, traslados, enfermedades, tratamientos
+- **Stored Procedures:** 9 procedimientos para registro de eventos
+- **Triggers:** Actualización automática de peso y transferencia de propiedad en compraventas
+- **Constraints:** Foreign keys, unique constraints, y validaciones
+
 ## 📦 Requisitos Previos
 
 Antes de comenzar, asegúrate de tener instalado:
