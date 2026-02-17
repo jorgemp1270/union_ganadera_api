@@ -17,10 +17,8 @@ services:
   db:
     image: postgres:15
     container_name: union_ganadera_db
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=union_ganadera
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db_schema.sql:/docker-entrypoint-initdb.d/init.sql
@@ -34,10 +32,8 @@ services:
     container_name: union_ganadera_s3
     ports:
       - "4566:4566"
-    environment:
-      - SERVICES=s3
-      - DEBUG=1
-      - DATA_DIR=/tmp/localstack/data
+    env_file:
+      - .env
     volumes:
       - localstack_data:/var/lib/localstack
       - ./init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
@@ -47,10 +43,8 @@ services:
   pgadmin:
     image: dpage/pgadmin4
     container_name: union_ganadera_pgadmin
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-      - PGADMIN_CONFIG_SERVER_MODE=False
+    env_file:
+      - .env
     ports:
       - "5050:80"
     depends_on:

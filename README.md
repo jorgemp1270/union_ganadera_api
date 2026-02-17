@@ -236,24 +236,51 @@ cd union_ganadera/backend_api
 
 ### 2. Variables de Entorno
 
-El proyecto incluye un archivo `.env` con la configuración predeterminada para desarrollo local. Puedes modificarlo según tus necesidades:
+El proyecto incluye un archivo `.env_example` como plantilla. Copia este archivo a `.env` y modifícalo según tus necesidades:
+
+```bash
+cp .env_example .env
+```
+
+**Configuración del archivo `.env`:**
 
 ```env
-# Base de datos
+# Database Configuration
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=union_ganadera
+DATABASE_URL=postgresql://postgres:postgres@db:5432/union_ganadera
 
-# JWT
-SECRET_KEY=your-secret-key-here
+# JWT Authentication
+SECRET_KEY=your-secret-key-here-generate-with-openssl-rand-hex-32
 ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# LocalStack S3
+# Gemini API (Optional)
+GEMINI_API_KEY=your-gemini-api-key-here
+
+# AWS S3 / LocalStack
 AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
+AWS_DEFAULT_REGION=us-east-1
 S3_BUCKET_NAME=documentos
 S3_ENDPOINT_URL=http://localstack:4566
+
+# LocalStack Configuration
+SERVICES=s3
+DEBUG=1
+DATA_DIR=/tmp/localstack/data
+
+# pgAdmin Configuration
+PGADMIN_DEFAULT_EMAIL=admin@admin.com
+PGADMIN_DEFAULT_PASSWORD=admin
+PGADMIN_CONFIG_SERVER_MODE=False
 ```
+
+**Importante:**
+- Para generar un `SECRET_KEY` seguro: `openssl rand -hex 32`
+- El archivo `.env` contiene información sensible y **no debe** incluirse en git
+- Todos los servicios (backend, db, localstack, pgadmin) utilizan el mismo archivo `.env`
 
 ### 3. Construir y Ejecutar con Docker
 
