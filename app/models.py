@@ -68,6 +68,15 @@ class DatosUsuario(Base):
 
     usuario_rel = relationship("Usuario", back_populates="datos")
 
+class Veterinario(Base):
+    __tablename__ = "veterinarios"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), unique=True, nullable=False)
+    cedula = Column(String(50), unique=True, nullable=False)
+
+    usuario = relationship("Usuario")
+
 class Bovino(Base):
     __tablename__ = "bovinos"
 

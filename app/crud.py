@@ -1,6 +1,22 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from fastapi import UploadFile, HTTPException
+import boto3
+import os
+import uuid as uuid_lib
 from . import models, schemas, auth
+
+# S3 client configuration for file uploads
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+
+s3_client = boto3.client(
+    "s3",
+    endpoint_url=S3_ENDPOINT_URL,
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    region_name=os.getenv("AWS_DEFAULT_REGION"),
+)
 
 def get_user_by_username(db: Session, username: str):
     return db.query(models.Usuario).filter(models.Usuario.curp == username).first()
@@ -43,8 +59,100 @@ def create_user(db: Session, user: schemas.UserCreate):
 
     return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
 
+def create_veterinario(db: Session, veterinario: schemas.VeterinarioCreate, cedula_file: UploadFile):
+    """
+    Create a new veterinario user with cedula number and upload their cedula file.
+    - User will have rol='veterinario'
+    - Cedula number is saved to veterinarios table
+    - Cedula file is stored in S3 and referenced in documentos table
+    """
+    hashed_password = auth.get_password_hash(veterinario.contrasena)
+
+    # Using the stored procedure registrar_usuario_nuevo with rol='veterinario'
+    query = text("""
+        SELECT registrar_usuario_nuevo(
+            :curp,
+            :contrasena,
+            :rol,
+            :nombre,
+            :apellido_p,
+            :apellido_m,
+            :sexo,
+            :fecha_nac,
+            :clave_elector,
+            :idmex
+        )
+    """)
+
+    params = {
+        "curp": veterinario.curp,
+        "contrasena": hashed_password,
+        "rol": "veterinario",
+        "nombre": veterinario.nombre,
+        "apellido_p": veterinario.apellido_p,
+        "apellido_m": veterinario.apellido_m,
+        "sexo": veterinario.sexo.value,
+        "fecha_nac": veterinario.fecha_nac,
+        "clave_elector": veterinario.clave_elector,
+        "idmex": veterinario.idmex
+    }
+
+    result = db.execute(query, params)
+    new_user_id = result.scalar()
+    db.commit()
+
+    # Upload cedula file to S3
+    file_extension = os.path.splitext(cedula_file.filename)[1]
+    storage_key = f"{new_user_id}/cedula_veterinario/{uuid_lib.uuid4()}{file_extension}"
+
+    try:
+        s3_client.upload_fileobj(
+            cedula_file.file,
+            S3_BUCKET_NAME,
+            storage_key
+        )
+    except Exception as e:
+        # Rollback user creation if file upload fails
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Could not upload cedula file: {str(e)}")
+
+    # Save document metadata
+    doc_data = {
+        "usuario_id": new_user_id,
+        "doc_type": "cedula_veterinario",
+        "storage_key": storage_key,
+        "original_filename": cedula_file.filename
+    }
+    create_documento(db=db, documento_data=doc_data)
+
+    # Save cedula number to veterinarios table
+    vet_query = text("""
+        INSERT INTO veterinarios (usuario_id, cedula)
+        VALUES (:usuario_id, :cedula)
+    """)
+    db.execute(vet_query, {"usuario_id": new_user_id, "cedula": veterinario.cedula})
+    db.commit()
+
+    return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
+
 def get_bovinos(db: Session, user_id: str, skip: int = 0, limit: int = 100):
     return db.query(models.Bovino).filter(models.Bovino.usuario_id == user_id).offset(skip).limit(limit).all()
+
+def search_bovino(db: Session, arete_barcode: str = None, arete_rfid: str = None, nariz_storage_key: str = None):
+    """
+    Search for a bovino by arete_barcode, arete_rfid, or nariz_storage_key.
+    Returns the first match found (priority: barcode > rfid > nariz).
+    """
+    query = db.query(models.Bovino)
+
+    if arete_barcode:
+        return query.filter(models.Bovino.arete_barcode == arete_barcode).first()
+    elif arete_rfid:
+        return query.filter(models.Bovino.arete_rfid == arete_rfid).first()
+    elif nariz_storage_key:
+        return query.filter(models.Bovino.nariz_storage_key == nariz_storage_key).first()
+
+    return None
 
 def get_bovino(db: Session, bovino_id: str):
     return db.query(models.Bovino).filter(models.Bovino.id == bovino_id).first()

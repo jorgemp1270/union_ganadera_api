@@ -31,12 +31,12 @@ graph TB
     subgraph "Cliente"
         Client[Cliente HTTP/Browser]
     end
-    
+
     subgraph "Docker Compose - Backend Services"
         subgraph "API Layer"
             FastAPI[FastAPI Backend<br/>Puerto 8000]
         end
-        
+
         subgraph "Routers"
             Users[users.py<br/>Autenticación]
             Bovinos[bovinos.py<br/>Gestión Ganado]
@@ -44,7 +44,7 @@ graph TB
             Files[files.py<br/>Documentos]
             Domicilios[domicilios.py<br/>Direcciones]
             Predios[predios.py<br/>Propiedades]
-            
+
             subgraph "Eventos Routers"
                 Pesos[pesos.py]
                 Vacunas[vacunaciones.py]
@@ -52,26 +52,26 @@ graph TB
                 Otros[+ 6 routers más]
             end
         end
-        
+
         subgraph "Core Modules"
             Auth[auth.py<br/>JWT + bcrypt]
             CRUD[crud.py<br/>DB Operations]
             Models[models.py<br/>SQLAlchemy ORM]
             Schemas[schemas.py<br/>Pydantic Validation]
         end
-        
+
         subgraph "Data Layer"
             PostgreSQL[(PostgreSQL 15<br/>Puerto 5432)]
             S3[LocalStack S3<br/>Puerto 4566]
         end
-        
+
         subgraph "Admin Tools"
             pgAdmin[pgAdmin 4<br/>Puerto 5050]
         end
     end
-    
+
     Client -->|HTTP/REST| FastAPI
-    
+
     FastAPI --> Users
     FastAPI --> Bovinos
     FastAPI --> EventosMain
@@ -82,7 +82,7 @@ graph TB
     FastAPI --> Vacunas
     FastAPI --> Dietas
     FastAPI --> Otros
-    
+
     Users --> Auth
     Users --> CRUD
     Bovinos --> Auth
@@ -98,13 +98,13 @@ graph TB
     Vacunas --> CRUD
     Dietas --> CRUD
     Otros --> CRUD
-    
+
     Auth --> Schemas
     CRUD --> Models
     Models --> PostgreSQL
-    
+
     pgAdmin -.->|Administración| PostgreSQL
-    
+
     style FastAPI fill:#009688,color:#fff
     style PostgreSQL fill:#336791,color:#fff
     style S3 fill:#FF9900,color:#fff
@@ -120,13 +120,13 @@ sequenceDiagram
     participant API as FastAPI
     participant Auth as auth.py
     participant DB as PostgreSQL
-    
+
     C->>API: POST /signup (CURP + datos)
     API->>Auth: Hash contraseña (bcrypt)
     Auth->>DB: Crear usuario
     DB-->>API: Usuario creado
     API-->>C: 200 OK
-    
+
     C->>API: POST /login (CURP + contraseña)
     API->>DB: Buscar usuario por CURP
     DB-->>API: Datos usuario
@@ -134,7 +134,7 @@ sequenceDiagram
     Auth->>Auth: Generar JWT token
     Auth-->>API: access_token
     API-->>C: {access_token, token_type}
-    
+
     C->>API: GET /bovinos (Header: Bearer token)
     API->>Auth: Validar JWT token
     Auth-->>API: Usuario autenticado
@@ -150,23 +150,23 @@ flowchart LR
     Client[Cliente] -->|POST /eventos/| Router[eventos_main.py]
     Router -->|Validar| Schema[Pydantic Schema]
     Schema -->|type + data| CRUD[crud.py]
-    
+
     CRUD -->|type='peso'| SP1[registrar_peso<br/>Stored Procedure]
     CRUD -->|type='vacunacion'| SP2[registrar_vacunacion<br/>Stored Procedure]
     CRUD -->|type='compraventa'| SP3[registrar_compraventa<br/>Stored Procedure]
     CRUD -->|type='...'| SPX[+ 6 procedimientos<br/>más]
-    
+
     SP1 --> DB[(PostgreSQL)]
     SP2 --> DB
     SP3 --> DB
     SPX --> DB
-    
+
     DB -->|Trigger| T1[update_cow_current_weight]
     DB -->|Trigger| T2[handle_compraventa_transfer]
-    
+
     DB -->|Response| CRUD
     CRUD -->|Evento creado| Client
-    
+
     style SP1 fill:#4CAF50,color:#fff
     style SP2 fill:#4CAF50,color:#fff
     style SP3 fill:#4CAF50,color:#fff
@@ -181,25 +181,25 @@ flowchart LR
 graph LR
     Client[Cliente] -->|POST /files/upload| FilesRouter[files.py]
     Client -->|POST /bovinos/:id/upload-nose-photo| BovinosRouter[bovinos.py]
-    
+
     FilesRouter -->|1. Validar auth| Auth[JWT Auth]
     BovinosRouter -->|1. Validar auth| Auth
-    
+
     FilesRouter -->|2. Upload| S3[LocalStack S3]
     BovinosRouter -->|2. Upload| S3
-    
+
     S3 -->|Storage Key| Pattern1["{user_id}/{doc_type}/{uuid}.ext"]
     S3 -->|Storage Key| Pattern2["{user_id}/nariz/{bovino_id}/{uuid}.ext"]
-    
+
     FilesRouter -->|3. Save metadata| DB[(PostgreSQL)]
     BovinosRouter -->|3. Update nariz_storage_key| DB
-    
+
     DB -->|4. Response| FilesRouter
     DB -->|4. Response| BovinosRouter
-    
+
     FilesRouter -->|GET /files/| Presigned[Generar URL<br/>Presignada 1h]
     Presigned -->|Download URL| Client
-    
+
     style S3 fill:#FF9900,color:#fff
     style DB fill:#336791,color:#fff
 ```
@@ -403,6 +403,23 @@ Motor de eventos dinámico con llamadas a procedimientos almacenados para:
 
 *Retorna un `access_token`. Incluye este token en el header `Authorization` como `Bearer <token>` para todos los endpoints protegidos.*
 
+**3. Registrar un veterinario**
+
+`POST /signup/veterinario`
+
+**Tipo de contenido:** `multipart/form-data`
+
+**Datos del formulario:**
+- `curp`, `contrasena`, `nombre`, `apellido_p`, `apellido_m`, `sexo`, `fecha_nac`, `clave_elector`, `idmex` (mismos que registro normal)
+- `cedula`: String con el número de cédula profesional (requerido, ej: "12345678")
+- `cedula_file`: Archivo PDF/imagen de la cédula profesional (requerido)
+
+**Características:**
+- El usuario se crea con `rol='veterinario'`
+- El número de cédula se guarda en la tabla `veterinarios`
+- El archivo de la cédula se almacena en S3 y se referencia en la tabla `documentos` con tipo `cedula_veterinario`
+- Solo los veterinarios pueden crear eventos que requieran validación profesional
+
 ### Gestión de Ganado
 
 **Listar tu ganado**
@@ -464,6 +481,18 @@ Motor de eventos dinámico con llamadas a procedimientos almacenados para:
 
 La foto se almacena en: `{user_id}/nariz/{bovino_id}/{uuid}.{extension}`
 
+**Buscar bovino (solo veterinarios)**
+
+`GET /bovinos/search?arete_barcode=MX123` o `?arete_rfid=RFID001` o `?nariz_storage_key=clave`
+
+- **Acceso:** Solo usuarios con `rol='veterinario'`
+- **Parámetros de búsqueda** (al menos uno requerido):
+  - `arete_barcode`: Buscar por código de barras del arete
+  - `arete_rfid`: Buscar por RFID del arete
+  - `nariz_storage_key`: Buscar por clave de almacenamiento de foto de nariz
+
+**Caso de uso:** Los veterinarios utilizan este endpoint para encontrar bovinos antes de crear eventos veterinarios. El dueño del ganado proporciona el código de barras o RFID de su arete, y el veterinario busca para obtener el `bovino_id` necesario para la creación de eventos.
+
 **Actualizar datos del animal**
 
 `PUT /bovinos/{id}`
@@ -477,7 +506,26 @@ La foto se almacena en: `{user_id}/nariz/{bovino_id}/{uuid}.{extension}`
 
 ### Crear Eventos
 
-**Ejemplo: Registrar Peso**
+**Restricciones de Roles:**
+
+**Eventos Veterinarios** (`vacunacion`, `desparasitacion`, `laboratorio`, `enfermedad`, `tratamiento`):
+- **SOLO veterinarios** (`rol='veterinario'`) pueden crear estos eventos
+- Los veterinarios pueden crear eventos para **CUALQUIER bovino** (no solo los propios)
+- El `veterinario_id` se establece automáticamente al ID del veterinario autenticado
+- Los usuarios regulares reciben `403 Forbidden` si intentan crear estos eventos
+
+**Eventos No Veterinarios** (`peso`, `dieta`, `compraventa`, `traslado`):
+- **Cualquier usuario autenticado** puede crear estos eventos
+- Los usuarios **SOLO** pueden crear estos eventos para **sus propios bovinos**
+- Intentar crear eventos para bovinos de otros usuarios retorna `403 Forbidden`
+
+**Flujo de trabajo para veterinarios:**
+1. El dueño del ganado proporciona el `arete_barcode` o `arete_rfid` de su animal
+2. El veterinario usa `GET /bovinos/search?arete_barcode=MX123` para encontrar el bovino
+3. El veterinario usa el `bovino_id` devuelto para crear el evento
+4. El sistema establece automáticamente `veterinario_id` al ID del veterinario
+
+**Ejemplo: Registrar Peso** (cualquier usuario)
 
 `POST /eventos/`
 
@@ -492,7 +540,7 @@ La foto se almacena en: `{user_id}/nariz/{bovino_id}/{uuid}.{extension}`
 }
 ```
 
-**Ejemplo: Registrar Vacunación**
+**Ejemplo: Registrar Vacunación** (solo veterinarios)
 
 `POST /eventos/`
 
@@ -510,7 +558,9 @@ La foto se almacena en: `{user_id}/nariz/{bovino_id}/{uuid}.{extension}`
 }
 ```
 
-**Ejemplo: Registrar Compraventa**
+**Nota:** El `veterinario_id` puede omitirse o será reemplazado automáticamente por el ID del usuario autenticado.
+
+**Ejemplo: Registrar Compraventa** (cualquier usuario)
 
 `POST /eventos/`
 

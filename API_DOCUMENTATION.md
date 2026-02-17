@@ -52,7 +52,65 @@ For production, replace with your deployed backend URL.
 
 ---
 
-### 2. User Login
+### 2. Veterinarian Registration
+
+**Endpoint:** `POST /signup/veterinario`
+
+**Headers:** `Content-Type: multipart/form-data`
+
+**Form Data:**
+- `curp`: String (required) - 18-character CURP
+- `contrasena`: String (required) - Password (8-72 characters)
+- `nombre`: String (required)
+- `apellido_p`: String (required)
+- `apellido_m`: String (optional)
+- `sexo`: String (required) - "M", "F", or "X"
+- `fecha_nac`: String (required) - Format: "YYYY-MM-DD"
+- `clave_elector`: String (required)
+- `idmex`: String (required)
+- `cedula`: String (required) - Professional license number (e.g., "12345678")
+- `cedula_file`: File (required) - Professional license document (PDF, image, etc.)
+
+**Response:** `200 OK`
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "curp": "VETJ900515HDFRHN01",
+  "rol": "veterinario",
+  "created_at": "2026-02-10T10:30:00Z"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request` - Invalid data or user already exists
+- `500 Internal Server Error` - Failed to upload cedula file
+
+**Important:**
+- The `cedula` (license number) is saved to the `veterinarios` table
+- The `cedula_file` (document) is stored in S3 and referenced in the `documentos` table with type `cedula_veterinario`
+- User is created with `rol='veterinario'`
+- Only veterinarians can create events that require veterinarian validation (vacunaciones, desparasitaciones, laboratorios, enfermedades, tratamientos)
+
+**Flutter Implementation:**
+```dart
+var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/signup/veterinario'));
+request.fields['curp'] = 'VETJ900515HDFRHN01';
+request.fields['contrasena'] = 'SecurePass123!';
+request.fields['nombre'] = 'Dr. Juan';
+request.fields['apellido_p'] = 'Veterinario';
+request.fields['sexo'] = 'M';
+request.fields['fecha_nac'] = '1990-05-15';
+request.fields['clave_elector'] = 'VETJMJHN900515H';
+request.fields['idmex'] = '1234567890';
+request.fields['cedula'] = '12345678';
+request.files.add(await http.MultipartFile.fromPath('cedula_file', cedulaFilePath));
+
+var response = await request.send();
+```
+
+---
+
+### 3. User Login
 
 **Endpoint:** `POST /login`
 
@@ -178,6 +236,47 @@ All endpoints require authentication.
   "detail": "Bovino not found"
 }
 ```
+
+---
+
+### 2.5. Search Cattle (Veterinarians Only)
+
+**Endpoint:** `GET /bovinos/search`
+
+**Required Role:** Veterinario only
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Query Parameters (at least one required):**
+- `arete_barcode`: String - Search by barcode tag
+- `arete_rfid`: String - Search by RFID tag
+- `nariz_storage_key`: String - Search by nose photo storage key
+
+**Example Request:**
+```
+GET /bovinos/search?arete_barcode=MX123456789
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "b7d3a8e9-1234-5678-9abc-def012345678",
+  "usuario_id": "550e8400-e29b-41d4-a716-446655440000",
+  "arete_barcode": "MX123456789",
+  "arete_rfid": "RFID001122",
+  "nombre": "Torito",
+  "raza_dominante": "Angus",
+  "peso_actual": 450.0,
+  "status": "activo"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request` - No search parameter provided
+- `403 Forbidden` - User is not a veterinarian
+- `404 Not Found` - No bovino found with provided identifier
+
+**Use Case:** Veterinarians use this endpoint to find cattle before creating veterinary events (vaccinations, treatments, etc.). The cattle owner provides their arete barcode or RFID, and the vet searches to get the `bovino_id` for event creation.
 
 ---
 
@@ -420,9 +519,30 @@ All events require authentication and ownership verification.
 }
 ```
 
+**Important Authorization Rules:**
+
+**For Veterinary Events** (`vacunacion`, `desparasitacion`, `laboratorio`, `enfermedad`, `tratamiento`):
+- **ONLY veterinarians** (`rol='veterinario'`) can create these events
+- Veterinarians can create these events for **ANY bovino** (not just their own)
+- The `veterinario_id` is **automatically set** to the authenticated veterinarian's ID
+- Regular users receive `403 Forbidden` if they attempt to create these events
+
+**For Non-Veterinary Events** (`peso`, `dieta`, `compraventa`, `traslado`):
+- **ANY authenticated user** can create these events
+- Users can **ONLY** create these events for **their own bovinos**
+- Attempting to create events for other users' cattle returns `403 Forbidden`
+
+**Workflow for Veterinarians:**
+1. Cattle owner provides their animal's `arete_barcode` or `arete_rfid`
+2. Veterinarian uses `GET /bovinos/search?arete_barcode=MX123` to find the bovino
+3. Veterinarian uses the returned `bovino_id` to create the event
+4. System automatically sets `veterinario_id` to the vet's user ID
+
 ---
 
 ### 1. Weight Recording (Peso)
+
+**Required Role:** Any authenticated user
 
 **Request:**
 ```json
@@ -452,6 +572,8 @@ All events require authentication and ownership verification.
 
 ### 2. Diet Change (Dieta)
 
+**Required Role:** Any authenticated user
+
 **Request:**
 ```json
 {
@@ -467,6 +589,8 @@ All events require authentication and ownership verification.
 ---
 
 ### 3. Vaccination (Vacunacion)
+
+**Required Role:** Veterinario only
 
 **Request:**
 ```json
@@ -487,9 +611,13 @@ All events require authentication and ownership verification.
 **Required Fields:**
 - `bovino_id`, `veterinario_id`, `tipo`, `lote`, `laboratorio`, `fecha_prox`
 
+**Note:** The `veterinario_id` is automatically set to the authenticated user. You can omit it or it will be overridden.
+
 ---
 
 ### 4. Deworming (Desparasitacion)
+
+**Required Role:** Veterinario only
 
 **Request:**
 ```json
@@ -510,6 +638,8 @@ All events require authentication and ownership verification.
 
 ### 5. Lab Test (Laboratorio)
 
+**Required Role:** Veterinario only
+
 **Request:**
 ```json
 {
@@ -527,6 +657,8 @@ All events require authentication and ownership verification.
 ---
 
 ### 6. Sale/Purchase (Compraventa)
+
+**Required Role:** Any authenticated user
 
 **Request:**
 ```json
@@ -552,6 +684,8 @@ All events require authentication and ownership verification.
 
 ### 7. Location Transfer (Traslado)
 
+**Required Role:** Any authenticated user
+
 **Request:**
 ```json
 {
@@ -569,6 +703,8 @@ All events require authentication and ownership verification.
 ---
 
 ### 8. Disease Detection (Enfermedad)
+
+**Required Role:** Veterinario only
 
 **Request:**
 ```json
@@ -588,6 +724,8 @@ All events require authentication and ownership verification.
 ---
 
 ### 9. Treatment (Tratamiento)
+
+**Required Role:** Veterinario only
 
 **Request:**
 ```json

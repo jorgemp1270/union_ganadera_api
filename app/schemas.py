@@ -39,6 +39,11 @@ class UserCreate(UserBase):
             raise ValueError('Password must be at least 8 characters long')
         return v
 
+class VeterinarioCreate(UserCreate):
+    # Inherits all UserCreate fields
+    cedula: str  # Professional license number
+    # Cedula file (document) will be uploaded separately in the multipart form
+
 class UserLogin(UserBase):
     contrasena: str
 

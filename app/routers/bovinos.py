@@ -29,6 +29,39 @@ async def read_bovinos(skip: int = 0, limit: int = 100,
                        db: Session = Depends(database.get_db)):
     return crud.get_bovinos(db, user_id=current_user.id, skip=skip, limit=limit)
 
+@router.get("/search", response_model=schemas.BovinoResponse)
+async def search_bovino(
+    arete_barcode: str = None,
+    arete_rfid: str = None,
+    nariz_storage_key: str = None,
+    current_user: models.Usuario = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Search for a bovino by arete_barcode, arete_rfid, or nariz_storage_key.
+    Only accessible to veterinarians.
+    """
+    if current_user.rol != 'veterinario':
+        raise HTTPException(status_code=403, detail="Only veterinarians can search for bovinos")
+
+    if not any([arete_barcode, arete_rfid, nariz_storage_key]):
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide at least one search parameter: arete_barcode, arete_rfid, or nariz_storage_key"
+        )
+
+    bovino = crud.search_bovino(
+        db=db,
+        arete_barcode=arete_barcode,
+        arete_rfid=arete_rfid,
+        nariz_storage_key=nariz_storage_key
+    )
+
+    if not bovino:
+        raise HTTPException(status_code=404, detail="Bovino not found")
+
+    return bovino
+
 @router.get("/{bovino_id}", response_model=schemas.BovinoResponse)
 async def read_bovino(bovino_id: str,
                       current_user: models.Usuario = Depends(auth.get_current_user),
