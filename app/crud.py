@@ -203,27 +203,27 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
         eid = db.execute(q, {"bid": bovino_id, "ali": alimento, "obs": observaciones}).scalar()
 
     elif etype == 'vacunacion':
-        # registrar_vacunacion(_bovino_id, _veterinario_id, _tipo, _lote, _laboratorio, _fecha_prox, _fecha, _observaciones)
-        q = text("SELECT registrar_vacunacion(:bid, :vid, :tipo, :lote, :lab, :fprox, NOW(), :obs)")
+        # registrar_vacunacion(_bovino_id, _usuario_id, _tipo, _lote, _laboratorio, _fecha_prox, _fecha, _observaciones)
+        q = text("SELECT registrar_vacunacion(:bid, :uid, :tipo, :lote, :lab, :fprox, NOW(), :obs)")
         eid = db.execute(q, {
-            "bid": bovino_id, "vid": data.get('veterinario_id'), "tipo": data.get('tipo'),
+            "bid": bovino_id, "uid": data.get('usuario_id'), "tipo": data.get('tipo'),
             "lote": data.get('lote'), "lab": data.get('laboratorio'), "fprox": data.get('fecha_prox'),
             "obs": observaciones
         }).scalar()
 
     elif etype == 'desparasitacion':
-        # registrar_desparasitacion(_bovino_id, _veterinario_id, _medicamento, _dosis, _fecha_prox, _fecha, _observaciones)
-        q = text("SELECT registrar_desparasitacion(:bid, :vid, :med, :dosis, :fprox, NOW(), :obs)")
+        # registrar_desparasitacion(_bovino_id, _usuario_id, _medicamento, _dosis, _fecha_prox, _fecha, _observaciones)
+        q = text("SELECT registrar_desparasitacion(:bid, :uid, :med, :dosis, :fprox, NOW(), :obs)")
         eid = db.execute(q, {
-            "bid": bovino_id, "vid": data.get('veterinario_id'), "med": data.get('medicamento'),
+            "bid": bovino_id, "uid": data.get('usuario_id'), "med": data.get('medicamento'),
             "dosis": data.get('dosis'), "fprox": data.get('fecha_prox'), "obs": observaciones
         }).scalar()
 
     elif etype == 'laboratorio':
-        # registrar_laboratorio(_bovino_id, _veterinario_id, _tipo, _resultado, _fecha, _observaciones)
-        q = text("SELECT registrar_laboratorio(:bid, :vid, :tipo, :resultado, NOW(), :obs)")
+        # registrar_laboratorio(_bovino_id, _usuario_id, _tipo, _resultado, _fecha, _observaciones)
+        q = text("SELECT registrar_laboratorio(:bid, :uid, :tipo, :resultado, NOW(), :obs)")
         eid = db.execute(q, {
-            "bid": bovino_id, "vid": data.get('veterinario_id'), "tipo": data.get('tipo'),
+            "bid": bovino_id, "uid": data.get('usuario_id'), "tipo": data.get('tipo'),
             "resultado": data.get('resultado'), "obs": observaciones
         }).scalar()
 
@@ -243,11 +243,11 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
         }).scalar()
 
     elif etype == 'enfermedad':
-        # registrar_enfermedad(_bovino_id, _veterinario_id, _tipo, _fecha, _observaciones)
+        # registrar_enfermedad(_bovino_id, _usuario_id, _tipo, _fecha, _observaciones)
         # NOTE: This returns enfermedad_id, not evento_id
-        q = text("SELECT registrar_enfermedad(:bid, :vid, :tipo, NOW(), :obs)")
+        q = text("SELECT registrar_enfermedad(:bid, :uid, :tipo, NOW(), :obs)")
         enfermedad_id = db.execute(q, {
-            "bid": bovino_id, "vid": data.get('veterinario_id'),
+            "bid": bovino_id, "uid": data.get('usuario_id'),
             "tipo": data.get('tipo'), "obs": observaciones
         }).scalar()
         db.commit()
@@ -256,10 +256,10 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
                        {"eid": enfermedad_id}).scalar()
 
     elif etype == 'tratamiento':
-        # registrar_tratamiento(_bovino_id, _enfermedad_id, _veterinario_id, _medicamento, _dosis, _periodo, _fecha, _observaciones)
-        q = text("SELECT registrar_tratamiento(:bid, :eid, :vid, :med, :dosis, :periodo, NOW(), :obs)")
+        # registrar_tratamiento(_bovino_id, _enfermedad_id, _usuario_id, _medicamento, _dosis, _periodo, _fecha, _observaciones)
+        q = text("SELECT registrar_tratamiento(:bid, :eid, :uid, :med, :dosis, :periodo, NOW(), :obs)")
         eid = db.execute(q, {
-            "bid": bovino_id, "eid": data.get('enfermedad_id'), "vid": data.get('veterinario_id'),
+            "bid": bovino_id, "eid": data.get('enfermedad_id'), "uid": data.get('usuario_id'),
             "med": data.get('medicamento'), "dosis": data.get('dosis'),
             "periodo": data.get('periodo'), "obs": observaciones
         }).scalar()

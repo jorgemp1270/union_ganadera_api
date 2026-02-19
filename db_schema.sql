@@ -374,7 +374,7 @@ $$ LANGUAGE plpgsql;
 -- A. Register Vaccination
 CREATE OR REPLACE FUNCTION registrar_vacunacion(
     _bovino_id UUID,
-    _veterinario_id UUID,
+    _usuario_id UUID,
     _tipo VARCHAR, -- e.g. "Fiebre Aftosa"
     _lote VARCHAR,
     _laboratorio VARCHAR,
@@ -384,13 +384,19 @@ CREATE OR REPLACE FUNCTION registrar_vacunacion(
 ) RETURNS UUID AS $$
 DECLARE
     _evento_id UUID;
+    _vet_id UUID;
 BEGIN
+    SELECT id INTO _vet_id FROM veterinarios WHERE usuario_id = _usuario_id;
+    IF _vet_id IS NULL THEN
+        RAISE EXCEPTION 'No veterinarian profile found for usuario_id %', _usuario_id;
+    END IF;
+
     INSERT INTO eventos (bovino_id, fecha, observaciones)
     VALUES (_bovino_id, _fecha, _observaciones)
     RETURNING id INTO _evento_id;
 
     INSERT INTO vacunaciones (evento_id, veterinario_id, tipo, lote, laboratorio, fecha_prox)
-    VALUES (_evento_id, _veterinario_id, _tipo, _lote, _laboratorio, _fecha_prox);
+    VALUES (_evento_id, _vet_id, _tipo, _lote, _laboratorio, _fecha_prox);
 
     RETURN _evento_id;
 END;
@@ -400,7 +406,7 @@ $$ LANGUAGE plpgsql;
 -- B. Register Deworming (Desparasitación)
 CREATE OR REPLACE FUNCTION registrar_desparasitacion(
     _bovino_id UUID,
-    _veterinario_id UUID,
+    _usuario_id UUID,
     _medicamento VARCHAR,
     _dosis VARCHAR,
     _fecha_prox DATE,
@@ -409,13 +415,19 @@ CREATE OR REPLACE FUNCTION registrar_desparasitacion(
 ) RETURNS UUID AS $$
 DECLARE
     _evento_id UUID;
+    _vet_id UUID;
 BEGIN
+    SELECT id INTO _vet_id FROM veterinarios WHERE usuario_id = _usuario_id;
+    IF _vet_id IS NULL THEN
+        RAISE EXCEPTION 'No veterinarian profile found for usuario_id %', _usuario_id;
+    END IF;
+
     INSERT INTO eventos (bovino_id, fecha, observaciones)
     VALUES (_bovino_id, _fecha, _observaciones)
     RETURNING id INTO _evento_id;
 
     INSERT INTO desparasitaciones (evento_id, veterinario_id, medicamento, dosis_admin, fecha_prox)
-    VALUES (_evento_id, _veterinario_id, _medicamento, _dosis, _fecha_prox);
+    VALUES (_evento_id, _vet_id, _medicamento, _dosis, _fecha_prox);
 
     RETURN _evento_id;
 END;
@@ -425,7 +437,7 @@ $$ LANGUAGE plpgsql;
 -- C. Register Lab Test
 CREATE OR REPLACE FUNCTION registrar_laboratorio(
     _bovino_id UUID,
-    _veterinario_id UUID,
+    _usuario_id UUID,
     _tipo VARCHAR, -- e.g. "Sangre"
     _resultado TEXT,
     _fecha TIMESTAMPTZ DEFAULT NOW(),
@@ -433,13 +445,19 @@ CREATE OR REPLACE FUNCTION registrar_laboratorio(
 ) RETURNS UUID AS $$
 DECLARE
     _evento_id UUID;
+    _vet_id UUID;
 BEGIN
+    SELECT id INTO _vet_id FROM veterinarios WHERE usuario_id = _usuario_id;
+    IF _vet_id IS NULL THEN
+        RAISE EXCEPTION 'No veterinarian profile found for usuario_id %', _usuario_id;
+    END IF;
+
     INSERT INTO eventos (bovino_id, fecha, observaciones)
     VALUES (_bovino_id, _fecha, _observaciones)
     RETURNING id INTO _evento_id;
 
     INSERT INTO laboratorios (evento_id, veterinario_id, tipo, resultado)
-    VALUES (_evento_id, _veterinario_id, _tipo, _resultado);
+    VALUES (_evento_id, _vet_id, _tipo, _resultado);
 
     RETURN _evento_id;
 END;
@@ -516,7 +534,7 @@ $$ LANGUAGE plpgsql;
 -- A. Register Disease Detection (Start of chain)
 CREATE OR REPLACE FUNCTION registrar_enfermedad(
     _bovino_id UUID,
-    _veterinario_id UUID,
+    _usuario_id UUID,
     _tipo VARCHAR, -- Diagnosis
     _fecha TIMESTAMPTZ DEFAULT NOW(),
     _observaciones TEXT DEFAULT ''
@@ -524,16 +542,22 @@ CREATE OR REPLACE FUNCTION registrar_enfermedad(
 DECLARE
     _evento_id UUID;
     _enfermedad_id UUID;
+    _vet_id UUID;
 BEGIN
+    SELECT id INTO _vet_id FROM veterinarios WHERE usuario_id = _usuario_id;
+    IF _vet_id IS NULL THEN
+        RAISE EXCEPTION 'No veterinarian profile found for usuario_id %', _usuario_id;
+    END IF;
+
     INSERT INTO eventos (bovino_id, fecha, observaciones)
     VALUES (_bovino_id, _fecha, _observaciones)
     RETURNING id INTO _evento_id;
 
     INSERT INTO enfermedades (evento_id, veterinario_id, tipo)
-    VALUES (_evento_id, _veterinario_id, _tipo)
-    RETURNING id INTO _enfermedad_id; -- Return Disease ID? Or Event ID?
+    VALUES (_evento_id, _vet_id, _tipo)
+    RETURNING id INTO _enfermedad_id;
 
-    -- Usually better to return the Disease ID here so the frontend can immediately link a treatment to it
+    -- Return Disease ID so the frontend can immediately link a treatment to it
     RETURN _enfermedad_id;
 END;
 $$ LANGUAGE plpgsql;
@@ -543,7 +567,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION registrar_tratamiento(
     _bovino_id UUID,
     _enfermedad_id UUID, -- Must link to an existing disease case
-    _veterinario_id UUID,
+    _usuario_id UUID,
     _medicamento VARCHAR,
     _dosis VARCHAR,
     _periodo VARCHAR,
@@ -552,13 +576,19 @@ CREATE OR REPLACE FUNCTION registrar_tratamiento(
 ) RETURNS UUID AS $$
 DECLARE
     _evento_id UUID;
+    _vet_id UUID;
 BEGIN
+    SELECT id INTO _vet_id FROM veterinarios WHERE usuario_id = _usuario_id;
+    IF _vet_id IS NULL THEN
+        RAISE EXCEPTION 'No veterinarian profile found for usuario_id %', _usuario_id;
+    END IF;
+
     INSERT INTO eventos (bovino_id, fecha, observaciones)
     VALUES (_bovino_id, _fecha, _observaciones)
     RETURNING id INTO _evento_id;
 
     INSERT INTO tratamientos (evento_id, enfermedad_id, veterinario_id, medicamento, dosis, periodo)
-    VALUES (_evento_id, _enfermedad_id, _veterinario_id, _medicamento, _dosis, _periodo);
+    VALUES (_evento_id, _enfermedad_id, _vet_id, _medicamento, _dosis, _periodo);
 
     RETURN _evento_id;
 END;

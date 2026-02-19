@@ -29,8 +29,8 @@ async def create_evento(evento: schemas.EventoCreateRequest,
                 status_code=403,
                 detail=f"Only users with role 'veterinario' can create {evento.type} events"
             )
-        # Automatically set veterinario_id to current user
-        evento.data['veterinario_id'] = str(current_user.id)
+        # Pass usuario_id; the DB function resolves it to veterinarios.id internally
+        evento.data['usuario_id'] = str(current_user.id)
     else:
         # Non-veterinary events (peso, dieta, compraventa, traslado):
         # Only the owner can create these events for their bovinos
@@ -39,3 +39,8 @@ async def create_evento(evento: schemas.EventoCreateRequest,
                 status_code=403,
                 detail="Not authorized to add events to this bovino. Only the owner can create this event type."
             )
+
+    db_evento = crud.create_evento(db, evento)
+    if db_evento is None:
+        raise HTTPException(status_code=500, detail="Failed to create event")
+    return db_evento
