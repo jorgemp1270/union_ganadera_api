@@ -1,115 +1,97 @@
-# API Backend - Unión Ganadera
+# API Backend — Unión Ganadera
 
-Sistema backend para la gestión del sistema de Unión Ganadera. Esta API está construida con FastAPI y proporciona endpoints RESTful para la administración de usuarios, ganado bovino, eventos y documentos.
+Sistema backend para la gestión del sistema de Unión Ganadera. Construido con FastAPI, proporciona endpoints RESTful para la administración de usuarios, ganado bovino, predios, domicilios, eventos y documentos.
 
-## 🔗 Repositorios
+## 🔗 Repositorios Relacionados
 
-Este proyecto es parte de un ecosistema más grande. Revisa los otros repositorios de sus componentes:
+- **Flutter App:** [union_ganadera_app](https://github.com/jorgemp1270/union_ganadera_app)
 
-- **Flutter App**: [union_ganadera_app](https://github.com/jorgemp1270/union_ganadera_app)
+---
 
-## 📋 Descripción del Proyecto
+## 📋 Descripción
 
-Este proyecto es un sistema completo de gestión ganadera que permite a los usuarios registrar y gestionar su ganado bovino, realizar seguimiento de eventos (vacunaciones, pesajes, tratamientos, etc.), administrar documentos y realizar transacciones de compra-venta. El sistema cuenta con autenticación JWT, almacenamiento de archivos en S3, y una arquitectura basada en microservicios con Docker.
+Sistema completo de gestión ganadera que permite:
 
-## 🚀 Tecnologías Utilizadas
+- Registrar y administrar ganado bovino con seguimiento de propietario
+- Gestionar predios y domicilios asociados a cada usuario
+- Registrar eventos veterinarios y productivos (pesajes, vacunaciones, compraventas, etc.)
+- Cargar y almacenar documentos en S3 con URLs prefirmadas para acceso externo
+- Autenticación JWT con roles diferenciados (usuario, veterinario, admin)
 
-- **Framework:** FastAPI (Python)
-- **Base de Datos:** PostgreSQL 15
-- **Almacenamiento de Objetos:** LocalStack (emulación de AWS S3)
-- **Contenedorización:** Docker & Docker Compose
-- **ORM:** SQLAlchemy
-- **Autenticación:** JWT (JSON Web Tokens)
-- **Administración de BD:** pgAdmin 4
+---
 
-## 🏗️ Arquitectura del Sistema
+## 🚀 Tecnologías
 
-### Arquitectura de Microservicios
+| Componente | Tecnología |
+|---|---|
+| Framework | FastAPI (Python 3.10) |
+| Base de datos | PostgreSQL 15 |
+| ORM | SQLAlchemy |
+| Validación | Pydantic v2 |
+| Autenticación | JWT + bcrypt |
+| Almacenamiento | LocalStack S3 (emulación AWS) |
+| Contenedorización | Docker & Docker Compose |
+| Administración BD | pgAdmin 4 |
+
+---
+
+## 🏗️ Arquitectura
+
+### Servicios Docker
 
 ```mermaid
 graph TB
-    subgraph "Cliente"
-        Client[Cliente HTTP/Browser]
+    subgraph "Cliente Externo (app móvil)"
+        App[Flutter App]
     end
 
-    subgraph "Docker Compose - Backend Services"
-        subgraph "API Layer"
-            FastAPI[FastAPI Backend<br/>Puerto 8000]
-        end
-
-        subgraph "Routers"
-            Users[users.py<br/>Autenticación]
-            Bovinos[bovinos.py<br/>Gestión Ganado]
-            EventosMain[eventos_main.py<br/>Crear Eventos]
-            Files[files.py<br/>Documentos]
-            Domicilios[domicilios.py<br/>Direcciones]
-            Predios[predios.py<br/>Propiedades]
-
-            subgraph "Eventos Routers"
-                Pesos[pesos.py]
-                Vacunas[vacunaciones.py]
-                Dietas[dietas.py]
-                Otros[+ 6 routers más]
-            end
-        end
-
-        subgraph "Core Modules"
-            Auth[auth.py<br/>JWT + bcrypt]
-            CRUD[crud.py<br/>DB Operations]
-            Models[models.py<br/>SQLAlchemy ORM]
-            Schemas[schemas.py<br/>Pydantic Validation]
-        end
-
-        subgraph "Data Layer"
-            PostgreSQL[(PostgreSQL 15<br/>Puerto 5432)]
-            S3[LocalStack S3<br/>Puerto 4566]
-        end
-
-        subgraph "Admin Tools"
-            pgAdmin[pgAdmin 4<br/>Puerto 5050]
-        end
+    subgraph "Docker Compose — union_net"
+        API[FastAPI Backend\nPuerto 8000]
+        DB[(PostgreSQL 15\nPuerto 5432)]
+        S3[LocalStack S3\nPuerto 4566]
+        PGA[pgAdmin 4\nPuerto 5050]
     end
 
-    Client -->|HTTP/REST| FastAPI
+    App -->|HTTP REST + JWT| API
+    API -->|SQLAlchemy ORM| DB
+    API -->|boto3 s3_client interno| S3
+    App -->|URL prefirmada directa| S3
+    PGA -.->|Administración| DB
 
-    FastAPI --> Users
-    FastAPI --> Bovinos
-    FastAPI --> EventosMain
-    FastAPI --> Files
-    FastAPI --> Domicilios
-    FastAPI --> Predios
-    FastAPI --> Pesos
-    FastAPI --> Vacunas
-    FastAPI --> Dietas
-    FastAPI --> Otros
+    style API fill:#009688,color:#fff
+    style DB fill:#336791,color:#fff
+    style S3 fill:#FF9900,color:#000
+    style PGA fill:#336791,color:#fff
+```
 
-    Users --> Auth
-    Users --> CRUD
-    Bovinos --> Auth
-    Bovinos --> CRUD
-    Bovinos --> S3
-    EventosMain --> Auth
-    EventosMain --> CRUD
-    Files --> Auth
-    Files --> S3
-    Domicilios --> CRUD
-    Predios --> CRUD
-    Pesos --> CRUD
-    Vacunas --> CRUD
-    Dietas --> CRUD
-    Otros --> CRUD
+### Módulos del Backend
 
-    Auth --> Schemas
-    CRUD --> Models
-    Models --> PostgreSQL
-
-    pgAdmin -.->|Administración| PostgreSQL
-
-    style FastAPI fill:#009688,color:#fff
-    style PostgreSQL fill:#336791,color:#fff
-    style S3 fill:#FF9900,color:#fff
-    style Auth fill:#FFC107,color:#000
-    style pgAdmin fill:#336791,color:#fff
+```
+app/
+├── main.py              # Punto de entrada, registro de routers
+├── auth.py              # JWT, bcrypt, dependencia get_current_user
+├── crud.py              # Todas las operaciones con la base de datos
+├── database.py          # Sesión SQLAlchemy, engine
+├── models.py            # Modelos ORM (tablas, enums)
+├── schemas.py           # Esquemas Pydantic (request/response)
+├── s3.py                # Clientes S3: s3_client (interno) y s3_public_client (URLs externas)
+└── routers/
+    ├── users.py         # Registro, login, perfil
+    ├── bovinos.py       # CRUD de bovinos, foto de nariz, búsqueda
+    ├── domicilios.py    # CRUD de domicilios + carga de comprobante
+    ├── predios.py       # CRUD de predios + carga de documento + bovinos por predio
+    ├── files.py         # Listado, carga genérica y eliminación de documentos
+    ├── eventos_main.py  # Creación de eventos (despacha a procedimientos almacenados)
+    └── eventos/
+        ├── pesos.py
+        ├── vacunaciones.py
+        ├── dietas.py
+        ├── desparasitaciones.py
+        ├── laboratorios.py
+        ├── compraventas.py
+        ├── traslados.py
+        ├── enfermedades.py
+        └── tratamientos.py
 ```
 
 ### Flujo de Autenticación
@@ -118,90 +100,68 @@ graph TB
 sequenceDiagram
     participant C as Cliente
     participant API as FastAPI
-    participant Auth as auth.py
     participant DB as PostgreSQL
 
     C->>API: POST /signup (CURP + datos)
-    API->>Auth: Hash contraseña (bcrypt)
-    Auth->>DB: Crear usuario
+    API->>DB: Hash bcrypt + crear usuario
     DB-->>API: Usuario creado
-    API-->>C: 200 OK
+    API-->>C: 200 OK {id, curp, rol}
 
     C->>API: POST /login (CURP + contraseña)
-    API->>DB: Buscar usuario por CURP
-    DB-->>API: Datos usuario
-    API->>Auth: Verificar contraseña hash
-    Auth->>Auth: Generar JWT token
-    Auth-->>API: access_token
-    API-->>C: {access_token, token_type}
+    API->>DB: Buscar usuario, verificar hash
+    DB-->>API: OK
+    API-->>C: {access_token, token_type: bearer}
 
-    C->>API: GET /bovinos (Header: Bearer token)
-    API->>Auth: Validar JWT token
-    Auth-->>API: Usuario autenticado
+    C->>API: GET /bovinos/ (Authorization: Bearer token)
+    API->>API: Validar JWT → get_current_user
     API->>DB: Query bovinos del usuario
-    DB-->>API: Lista bovinos
+    DB-->>API: Lista
     API-->>C: 200 OK + datos
 ```
 
-### Flujo de Eventos (Sistema de Eventos Dinámico)
+### Almacenamiento S3 — Clientes Dual
+
+El módulo `app/s3.py` define dos clientes boto3:
+
+| Cliente | Variable de entorno | Uso |
+|---|---|---|
+| `s3_client` | `S3_ENDPOINT_URL` (hostname Docker interno) | Subir y eliminar archivos desde el backend |
+| `s3_public_client` | `S3_PUBLIC_URL` (IP/hostname alcanzable externamente) | Generar URLs prefirmadas para la app móvil |
+
+Esto resuelve el problema de que las URLs prefirmadas embeben el hostname del cliente S3: si se usara `localstack:4566`, la app móvil no podría acceder. Con `S3_PUBLIC_URL=http://192.168.x.x:4566` las URLs son accesibles desde la red local.
 
 ```mermaid
-flowchart LR
-    Client[Cliente] -->|POST /eventos/| Router[eventos_main.py]
-    Router -->|Validar| Schema[Pydantic Schema]
-    Schema -->|type + data| CRUD[crud.py]
+sequenceDiagram
+    participant App as App Móvil
+    participant API as FastAPI Backend
+    participant S3i as LocalStack S3<br/>(interno: localstack:4566)
+    participant S3e as LocalStack S3<br/>(externo: 192.168.x.x:4566)
 
-    CRUD -->|type='peso'| SP1[registrar_peso<br/>Stored Procedure]
-    CRUD -->|type='vacunacion'| SP2[registrar_vacunacion<br/>Stored Procedure]
-    CRUD -->|type='compraventa'| SP3[registrar_compraventa<br/>Stored Procedure]
-    CRUD -->|type='...'| SPX[+ 6 procedimientos<br/>más]
-
-    SP1 --> DB[(PostgreSQL)]
-    SP2 --> DB
-    SP3 --> DB
-    SPX --> DB
-
-    DB -->|Trigger| T1[update_cow_current_weight]
-    DB -->|Trigger| T2[handle_compraventa_transfer]
-
-    DB -->|Response| CRUD
-    CRUD -->|Evento creado| Client
-
-    style SP1 fill:#4CAF50,color:#fff
-    style SP2 fill:#4CAF50,color:#fff
-    style SP3 fill:#4CAF50,color:#fff
-    style SPX fill:#4CAF50,color:#fff
-    style T1 fill:#FF5722,color:#fff
-    style T2 fill:#FF5722,color:#fff
+    App->>API: POST /files/upload (archivo + doc_type)
+    API->>API: ¿Existe doc anterior del mismo tipo? → s3_client.delete_object
+    API->>S3i: s3_client.upload_fileobj (subida interna)
+    S3i-->>API: OK
+    API->>API: Guardar metadata en PostgreSQL
+    API->>API: s3_public_client.generate_presigned_url
+    API-->>App: {id, doc_type, download_url: http://192.168.x.x:4566/...}
+    App->>S3e: GET download_url (acceso directo)
+    S3e-->>App: Archivo
 ```
 
-### Almacenamiento de Archivos (S3)
+### Patrones de Keys en S3
 
-```mermaid
-graph LR
-    Client[Cliente] -->|POST /files/upload| FilesRouter[files.py]
-    Client -->|POST /bovinos/:id/upload-nose-photo| BovinosRouter[bovinos.py]
+```
+# Documentos genéricos (frente/reverso de INE, cedula vet, etc.)
+{user_id}/{doc_type}/{uuid}.{ext}
 
-    FilesRouter -->|1. Validar auth| Auth[JWT Auth]
-    BovinosRouter -->|1. Validar auth| Auth
+# Comprobante de domicilio (uno por domicilio)
+{user_id}/comprobante_domicilio/{domicilio_id}/{uuid}.{ext}
 
-    FilesRouter -->|2. Upload| S3[LocalStack S3]
-    BovinosRouter -->|2. Upload| S3
+# Documento de predio (uno por predio)
+{user_id}/predio/{predio_id}/{uuid}.{ext}
 
-    S3 -->|Storage Key| Pattern1["{user_id}/{doc_type}/{uuid}.ext"]
-    S3 -->|Storage Key| Pattern2["{user_id}/nariz/{bovino_id}/{uuid}.ext"]
-
-    FilesRouter -->|3. Save metadata| DB[(PostgreSQL)]
-    BovinosRouter -->|3. Update nariz_storage_key| DB
-
-    DB -->|4. Response| FilesRouter
-    DB -->|4. Response| BovinosRouter
-
-    FilesRouter -->|GET /files/| Presigned[Generar URL<br/>Presignada 1h]
-    Presigned -->|Download URL| Client
-
-    style S3 fill:#FF9900,color:#fff
-    style DB fill:#336791,color:#fff
+# Foto de nariz de bovino (una por bovino)
+{user_id}/nariz/{bovino_id}/{uuid}.{ext}
 ```
 
 ### Esquema de Base de Datos
@@ -210,512 +170,340 @@ graph LR
   <img src=".resources/img/db_schema.png" width="100%" alt="Database Schema" />
 </p>
 
-El esquema completo incluye:
-- **Tablas principales:** usuarios, bovinos, eventos, documentos, domicilios, predios
+- **Tablas principales:** usuarios, bovinos, documentos, domicilios, predios
 - **Tablas de eventos:** pesos, dietas, vacunaciones, desparasitaciones, laboratorios, compraventas, traslados, enfermedades, tratamientos
 - **Stored Procedures:** 9 procedimientos para registro de eventos
 - **Triggers:** Actualización automática de peso y transferencia de propiedad en compraventas
-- **Constraints:** Foreign keys, unique constraints, y validaciones
+- **Predios:** FK directa a `usuarios.id` (sin pasar por domicilio)
+
+---
 
 ## 📦 Requisitos Previos
 
-Antes de comenzar, asegúrate de tener instalado:
-
-- [Docker](https://www.docker.com/) (versión 20.10 o superior)
-- [Docker Compose](https://docs.docker.com/compose/) (versión 2.0 o superior)
+- [Docker](https://www.docker.com/) ≥ 20.10
+- [Docker Compose](https://docs.docker.com/compose/) ≥ 2.0
 - Git
 
-## 🔧 Configuración e Instalación
+---
 
-### 1. Clonar el Repositorio
+## 🔧 Instalación y Configuración
+
+### 1. Clonar el repositorio
 
 ```bash
 git clone <repository-url>
 cd union_ganadera/backend_api
 ```
 
-### 2. Variables de Entorno
+### 2. Variables de entorno
 
-El proyecto incluye un archivo `.env_example` como plantilla. Copia este archivo a `.env` y modifícalo según tus necesidades:
+Copia `.env_example` a `.env` y ajusta los valores:
 
 ```bash
 cp .env_example .env
 ```
 
-**Configuración del archivo `.env`:**
+Contenido de referencia del `.env`:
 
 ```env
-# Database Configuration
+# Base de datos
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=union_ganadera
 DATABASE_URL=postgresql://postgres:postgres@db:5432/union_ganadera
 
-# JWT Authentication
-SECRET_KEY=your-secret-key-here-generate-with-openssl-rand-hex-32
+# Autenticación JWT
+SECRET_KEY=genera-con-openssl-rand-hex-32
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# Gemini API (Optional)
-GEMINI_API_KEY=your-gemini-api-key-here
+# Gemini API (opcional)
+GEMINI_API_KEY=tu-api-key
 
-# AWS S3 / LocalStack
+# S3 / LocalStack
 AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
 AWS_DEFAULT_REGION=us-east-1
 S3_BUCKET_NAME=documentos
 S3_ENDPOINT_URL=http://localstack:4566
 
-# LocalStack Configuration
+# IP externa de LocalStack para URLs prefirmadas accesibles desde la app móvil
+# Usa la IP LAN de tu máquina (no localhost)
+S3_PUBLIC_URL=http://192.168.x.x:4566
+
+# LocalStack
 SERVICES=s3
 DEBUG=1
-DATA_DIR=/tmp/localstack/data
+PERSISTENCE=1
 
-# pgAdmin Configuration
+# pgAdmin
 PGADMIN_DEFAULT_EMAIL=admin@admin.com
 PGADMIN_DEFAULT_PASSWORD=admin
-PGADMIN_CONFIG_SERVER_MODE=False
 ```
 
-**Importante:**
-- Para generar un `SECRET_KEY` seguro: `openssl rand -hex 32`
-- El archivo `.env` contiene información sensible y **no debe** incluirse en git
-- Todos los servicios (backend, db, localstack, pgadmin) utilizan el mismo archivo `.env`
+> **Notas:**
+> - Genera `SECRET_KEY` con: `openssl rand -hex 32`
+> - `S3_PUBLIC_URL` debe ser la IP de tu máquina en la red local para que la app móvil pueda acceder a los archivos.
+> - `PERSISTENCE=1` conserva los datos de S3 entre reinicios del contenedor LocalStack.
+> - El archivo `.env` **no debe** subirse a git.
 
-### 3. Construir y Ejecutar con Docker
-
-Ejecuta el siguiente comando para construir e iniciar todos los servicios:
-
-```bash
-docker-compose up --build
-```
-
-Para ejecutar en segundo plano (modo detached):
+### 3. Construir e iniciar
 
 ```bash
 docker-compose up --build -d
 ```
 
-Este comando iniciará los siguientes servicios:
+| Servicio | Puerto | URL |
+|---|---|---|
+| Backend API | 8000 | http://localhost:8000 |
+| Swagger UI | 8000 | http://localhost:8000/docs |
+| ReDoc | 8000 | http://localhost:8000/redoc |
+| PostgreSQL | 5432 | — |
+| LocalStack S3 | 4566 | http://localhost:4566 |
+| pgAdmin | 5050 | http://localhost:5050 |
 
-| Servicio | Puerto | Descripción |
-|----------|--------|-------------|
-| **Backend API** | 8000 | Aplicación FastAPI |
-| **PostgreSQL** | 5432 | Base de datos |
-| **LocalStack S3** | 4566 | Almacenamiento de archivos |
-| **pgAdmin** | 5050 | Interfaz de administración de BD |
+### 4. Conectar pgAdmin (opcional)
 
-### 4. Verificar la Instalación
+1. Abre http://localhost:5050
+2. Login: `admin@admin.com` / `admin`
+3. Agregar servidor con **Host:** `db`, **Puerto:** `5432`, **Usuario:** `postgres`, **Contraseña:** `postgres`
 
-Una vez que los contenedores estén ejecutándose, verifica que todo funcione correctamente:
-
-- **API Documentación (Swagger UI):** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **API Documentación (ReDoc):** [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- **pgAdmin:** [http://localhost:5050](http://localhost:5050)
-
-### 5. Configurar pgAdmin (Opcional)
-
-Para administrar la base de datos mediante pgAdmin:
-
-1. Abre [http://localhost:5050](http://localhost:5050)
-2. Inicia sesión con:
-   - **Email:** `admin@admin.com`
-   - **Password:** `admin`
-3. Agrega una nueva conexión al servidor:
-   - **Name:** `Union Ganadera DB`
-   - **Host:** `db` (usar el nombre del contenedor, no localhost)
-   - **Port:** `5432`
-   - **Username:** `postgres`
-   - **Password:** `postgres`
-   - **Database:** `union_ganadera`
-
-### 6. Detener los Servicios
-
-Para detener todos los contenedores:
+### 5. Detener servicios
 
 ```bash
+# Solo detener contenedores
 docker-compose down
-```
 
-Para detener y eliminar volúmenes (⚠️ esto borrará los datos):
-
-```bash
+# Detener y borrar todos los datos (⚠️ irreversible)
 docker-compose down -v
 ```
 
-## ✨ Características Principales
+---
 
-### Seguridad
-- **Protección contra Inyección SQL:** Uso de consultas parametrizadas y procedimientos almacenados
-- **Autenticación:** JWT con contraseñas hasheadas usando bcrypt
-- **Autorización:** Verificación de propiedad de recursos antes de modificaciones
-- **CORS:** Configuración de políticas de origen cruzado
+## ✨ Funcionalidades Principales
 
-### Gestión de Usuarios
-- Registro de usuarios con validación de CURP
-- Login con generación de tokens JWT
-- Roles de usuario (usuario, veterinario, admin)
+### Usuarios y Autenticación
+- Registro con CURP único, datos personales y rol
+- Login con token JWT (expiración configurable)
+- Registro especial para veterinarios con número de cédula y archivo adjunto
+- Roles: `usuario`, `veterinario`, `admin`, `ban`
 
-### Gestión de Ganado (Bovinos)
-- CRUD completo de registros de ganado
-- Identificación con arete (código de barras y RFID)
-- Nombre personalizado para cada animal
-- Fotografía de nariz para identificación biométrica (almacenada en S3)
-- Seguimiento de peso, raza, propósito y estado
-- Relaciones de parentesco (padre/madre)
-- Registro de propietario original (usuario_original_id)
-- Asignación a predios específicos
+### Ganado Bovino
+- CRUD completo con todos los campos productivos (raza, sexo, peso, propósito, etc.)
+- Identificación por arete (código de barras y RFID)
+- Foto de nariz como identificador biométrico (almacenada en S3, se reemplaza automáticamente al re-subir)
+- Respuestas incluyen `nariz_url` (URL prefirmada con vigencia de 1 hora)
+- Búsqueda por nombre o arete — solo veterinarios
+- Registro de propietario actual (`usuario_id`) y propietario original inmutable (`usuario_original_id`)
+- Asignación a predio específico (`predio_id`)
+
+### Predios y Domicilios
+- CRUD de predios con clave catastral, superficie y coordenadas GPS
+- CRUD de domicilios con campos de dirección mexicana
+- Asociación directa de predios al usuario (`usuario_id`)
+- Listado de bovinos por predio: `GET /predios/{predio_id}/bovinos`
+
+### Documentos
+- Carga genérica: `POST /files/upload` con campo `doc_type`
+- Carga de comprobante de domicilio: `POST /domicilios/{id}/upload-document`
+- Carga de documento de predio: `POST /predios/{id}/upload-document`
+- Carga de foto de nariz: `POST /bovinos/{id}/upload-nose-photo`
+- Eliminación: `DELETE /files/{doc_id}` (borra de S3 y de la base de datos)
+- **Comportamiento upsert:** re-subir a cualquier endpoint reemplaza el archivo anterior automáticamente
+- URLs prefirmadas con validez de 1 hora en todas las respuestas
+
+**Tipos de documento (`doc_type`):**
+
+| Valor | Descripción |
+|---|---|
+| `identificacion_frente` | Frente de INE / pasaporte |
+| `identificacion_reverso` | Reverso de INE |
+| `comprobante_domicilio` | Comprobante de domicilio (por domicilio) |
+| `predio` | Documento de propiedad (por predio) |
+| `cedula_veterinario` | Cédula profesional veterinaria |
+| `otro` | Otro documento general |
 
 ### Sistema de Eventos
-Motor de eventos dinámico con llamadas a procedimientos almacenados para:
-- **Pesos:** Registro de pesaje (actualiza automáticamente el peso actual)
-- **Vacunaciones:** Control de vacunas con fechas de próxima aplicación
-- **Dietas:** Cambios en la alimentación
-- **Desparasitaciones:** Control de desparasitantes
-- **Laboratorios:** Resultados de análisis clínicos
-- **Compraventas:** Transferencia automática de propiedad usando CURP
-- **Traslados:** Cambios de ubicación entre predios
-- **Enfermedades:** Registro de diagnósticos
-- **Tratamientos:** Medicamentos y procedimientos
+Motor de eventos dinámico que despacha a procedimientos almacenados en PostgreSQL:
 
-### Gestión de Ubicaciones
-- **Domicilios:** Direcciones de los usuarios
-- **Predios:** Propiedades con coordenadas GPS y clave catastral
+```mermaid
+flowchart TD
+    Client([App Móvil]) -->|POST /eventos/ + JWT| EM[eventos_main.py]
+    EM --> RolCheck{¿Rol requerido?}
 
-### Almacenamiento de Documentos
-- Carga de documentos a S3
-- URLs prefirmadas con validez de 1 hora
-- Tipos: identificación, comprobante de domicilio, documentos de predio, cédula veterinaria
-- Estado de autorización por administradores
+    RolCheck -->|Veterinario| VetCheck{¿usuario.rol == veterinario?}
+    VetCheck -->|No| E403[403 Forbidden]
+    VetCheck -->|Sí| AnyBovino[Puede ser cualquier bovino]
 
-### Almacenamiento de Documentos
-- Carga de documentos a S3
-- URLs prefirmadas con validez de 1 hora
-- Tipos: identificación, comprobante de domicilio, documentos de predio, cédula veterinaria
-- Estado de autorización por administradores
+    RolCheck -->|Cualquier usuario| OwnerCheck{¿bovino.usuario_id == usuario?}
+    OwnerCheck -->|No| E4032[403 Forbidden]
+    OwnerCheck -->|Sí| OwnBovino[Solo bovinos propios]
 
-## 📚 Guía de Uso de la API
+    AnyBovino --> Dispatch
+    OwnBovino --> Dispatch
+
+    Dispatch -->|type=peso| SP1[SP: registrar_peso]
+    Dispatch -->|type=vacunacion| SP2[SP: registrar_vacunacion]
+    Dispatch -->|type=compraventa| SP3[SP: registrar_compraventa]
+    Dispatch -->|type=traslado| SP4[SP: registrar_traslado]
+    Dispatch -->|type=...| SPX[+ 5 SPs más]
+
+    SP1 -->|Trigger| T1[update_cow_current_weight]
+    SP3 -->|Trigger| T2[handle_compraventa_transfer]
+
+    SP1 & SP2 & SP3 & SP4 & SPX --> DB[(PostgreSQL)]
+    T1 & T2 --> DB
+    DB -->|Evento creado| Client
+
+    style E403 fill:#f44336,color:#fff
+    style E4032 fill:#f44336,color:#fff
+    style T1 fill:#FF5722,color:#fff
+    style T2 fill:#FF5722,color:#fff
+    style SP1 fill:#4CAF50,color:#fff
+    style SP2 fill:#4CAF50,color:#fff
+    style SP3 fill:#4CAF50,color:#fff
+    style SP4 fill:#4CAF50,color:#fff
+    style SPX fill:#4CAF50,color:#fff
+```
+
+| Tipo | Rol requerido | Descripción |
+|---|---|---|
+| `peso` | Cualquier usuario (solo bovinos propios) | Registra un pesaje; actualiza `peso_actual` automáticamente |
+| `dieta` | Cualquier usuario (solo bovinos propios) | Cambio de alimentación |
+| `compraventa` | Cualquier usuario (solo bovinos propios) | Transfiere propiedad por CURP del comprador |
+| `traslado` | Cualquier usuario (solo bovinos propios) | Cambio de predio/ubicación |
+| `vacunacion` | Solo veterinario | Registro de vacuna con próxima fecha |
+| `desparasitacion` | Solo veterinario | Control de desparasitantes |
+| `laboratorio` | Solo veterinario | Resultados de análisis clínicos |
+| `enfermedad` | Solo veterinario | Diagnóstico de enfermedad |
+| `tratamiento` | Solo veterinario | Medicamento o procedimiento |
+
+Los veterinarios pueden registrar eventos para **cualquier** bovino del sistema; los usuarios regulares solo para los propios.
+
+**Flujo de compraventa (transferencia de propiedad):**
+
+```mermaid
+sequenceDiagram
+    participant V as Vendedor (App)
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    V->>API: POST /eventos/ {type: compraventa, comprador_curp: ...}
+    API->>DB: Buscar comprador por CURP
+    DB-->>API: comprador encontrado
+    API->>DB: CALL registrar_compraventa(...)
+    DB->>DB: INSERT en compraventas
+    DB->>DB: Trigger: UPDATE bovinos SET usuario_id = comprador.id
+    DB-->>API: Evento creado
+    API-->>V: 200 OK (bovino.usuario_id actualizado)
+```
+
+## 🔌 Resumen de Endpoints
 
 ### Autenticación
-
-**1. Registrar un nuevo usuario**
-
-`POST /signup`
-
-```json
-{
-  "curp": "DOEJ900515HDFRHN01",
-  "contrasena": "MiPassword123!",
-  "nombre": "Juan",
-  "apellido_p": "Pérez",
-  "apellido_m": "García",
-  "sexo": "M",
-  "fecha_nac": "1990-05-15",
-  "clave_elector": "PRGAJN900515H",
-  "idmex": "1234567890123"
-}
-```
-
-**2. Iniciar sesión**
-
-`POST /login`
-
-```json
-{
-  "curp": "DOEJ900515HDFRHN01",
-  "contrasena": "MiPassword123!"
-}
-}
-```
-
-*Retorna un `access_token`. Incluye este token en el header `Authorization` como `Bearer <token>` para todos los endpoints protegidos.*
-
-**3. Registrar un veterinario**
-
-`POST /signup/veterinario`
-
-**Tipo de contenido:** `multipart/form-data`
-
-**Datos del formulario:**
-- `curp`, `contrasena`, `nombre`, `apellido_p`, `apellido_m`, `sexo`, `fecha_nac`, `clave_elector`, `idmex` (mismos que registro normal)
-- `cedula`: String con el número de cédula profesional (requerido, ej: "12345678")
-- `cedula_file`: Archivo PDF/imagen de la cédula profesional (requerido)
-
-**Características:**
-- El usuario se crea con `rol='veterinario'`
-- El número de cédula se guarda en la tabla `veterinarios`
-- El archivo de la cédula se almacena en S3 y se referencia en la tabla `documentos` con tipo `cedula_veterinario`
-- Solo los veterinarios pueden crear eventos que requieran validación profesional
-
-### Gestión de Ganado
-
-**Listar tu ganado**
-
-`GET /bovinos/?skip=0&limit=100`
-
-**Registrar un nuevo animal**
-
-`POST /bovinos/`
-
-```json
-{
-  "nombre": "Torito",
-  "arete_barcode": "MX123456",
-  "arete_rfid": "RFID001122",
-  "madre_id": "uuid-madre",
-  "padre_id": "uuid-padre",
-  "predio_id": "uuid-predio",
-  "raza_dominante": "Angus",
-  "sexo": "M",
-  "peso_nac": 35.5,
-  "peso_actual": 450.0,
-  "fecha_nac": "2023-03-15",
-  "proposito": "Engorda"
-}
-```
-
-**Campos Automáticos:**
-- `usuario_id`: Se establece automáticamente al usuario autenticado
-- `usuario_original_id`: Se establece automáticamente al usuario que registra el bovino y **nunca cambia**, incluso si el bovino es vendido
-- Estos campos NO deben incluirse en el cuerpo de la petición
-
-*Nota: Todos los demás campos son opcionales.*
-
-**Actualizar información de un animal**
-
-`PUT /bovinos/{bovino_id}`
-
-```json
-{
-  "nombre": "Torito Jr.",
-  "peso_actual": 475.5,
-  "proposito": "Reproducción"
-}
-```
-
-**Campos Protegidos (NO se pueden actualizar via PUT):**
-- `usuario_id` - Solo cambia mediante eventos de compraventa (trigger de base de datos)
-- `usuario_original_id` - Inmutable, nunca cambia
-- `nariz_storage_key` - Solo se actualiza mediante `POST /bovinos/{id}/upload-nose-photo`
-- `id`, `status` - Campos gestionados por el sistema
-
-**Subir foto de nariz**
-
-`POST /bovinos/{bovino_id}/upload-nose-photo`
-
-- **Content-Type:** `multipart/form-data`
-- **Parámetro:** `file` - Archivo de imagen (JPG, PNG, etc.)
-
-La foto se almacena en: `{user_id}/nariz/{bovino_id}/{uuid}.{extension}`
-
-**Buscar bovino (solo veterinarios)**
-
-`GET /bovinos/search?arete_barcode=MX123` o `?arete_rfid=RFID001` o `?nariz_storage_key=clave`
-
-- **Acceso:** Solo usuarios con `rol='veterinario'`
-- **Parámetros de búsqueda** (al menos uno requerido):
-  - `arete_barcode`: Buscar por código de barras del arete
-  - `arete_rfid`: Buscar por RFID del arete
-  - `nariz_storage_key`: Buscar por clave de almacenamiento de foto de nariz
-
-**Caso de uso:** Los veterinarios utilizan este endpoint para encontrar bovinos antes de crear eventos veterinarios. El dueño del ganado proporciona el código de barras o RFID de su arete, y el veterinario busca para obtener el `bovino_id` necesario para la creación de eventos.
-
-**Actualizar datos del animal**
-
-`PUT /bovinos/{id}`
-
-```json
-{
-  "nombre": "Torito Jr.",
-  "peso_actual": 450.5
-}
-```
-
-### Crear Eventos
-
-**Restricciones de Roles:**
-
-**Eventos Veterinarios** (`vacunacion`, `desparasitacion`, `laboratorio`, `enfermedad`, `tratamiento`):
-- **SOLO veterinarios** (`rol='veterinario'`) pueden crear estos eventos
-- Los veterinarios pueden crear eventos para **CUALQUIER bovino** (no solo los propios)
-- El `veterinario_id` se establece automáticamente al ID del veterinario autenticado
-- Los usuarios regulares reciben `403 Forbidden` si intentan crear estos eventos
-
-**Eventos No Veterinarios** (`peso`, `dieta`, `compraventa`, `traslado`):
-- **Cualquier usuario autenticado** puede crear estos eventos
-- Los usuarios **SOLO** pueden crear estos eventos para **sus propios bovinos**
-- Intentar crear eventos para bovinos de otros usuarios retorna `403 Forbidden`
-
-**Flujo de trabajo para veterinarios:**
-1. El dueño del ganado proporciona el `arete_barcode` o `arete_rfid` de su animal
-2. El veterinario usa `GET /bovinos/search?arete_barcode=MX123` para encontrar el bovino
-3. El veterinario usa el `bovino_id` devuelto para crear el evento
-4. El sistema establece automáticamente `veterinario_id` al ID del veterinario
-
-**Ejemplo: Registrar Peso** (cualquier usuario)
-
-`POST /eventos/`
-
-```json
-{
-  "type": "peso",
-  "data": {
-    "bovino_id": "uuid-del-bovino",
-    "peso_nuevo": 500.5,
-    "observaciones": "Control mensual"
-  }
-}
-```
-
-**Ejemplo: Registrar Vacunación** (solo veterinarios)
-
-`POST /eventos/`
-
-```json
-{
-  "type": "vacunacion",
-  "data": {
-    "bovino_id": "uuid-del-bovino",
-    "veterinario_id": "uuid-veterinario",
-    "tipo": "Fiebre Aftosa",
-    "lote": "LOTE2024-001",
-    "laboratorio": "Zoetis",
-    "fecha_prox": "2027-01-24"
-  }
-}
-```
-
-**Nota:** El `veterinario_id` puede omitirse o será reemplazado automáticamente por el ID del usuario autenticado.
-
-**Ejemplo: Registrar Compraventa** (cualquier usuario)
-
-`POST /eventos/`
-
-```json
-{
-  "type": "compraventa",
-  "data": {
-    "bovino_id": "uuid-del-bovino",
-    "comprador_curp": "DOEJ900515HDFRHN01",
-    "vendedor_curp": "SMIJ850320MDFRHN02",
-    "observaciones": "Venta acordada"
-  }
-}
-```
-
-### Consultar Eventos Detallados
-
-Cada tipo de evento tiene endpoints dedicados para consultar información detallada:
-
-- **Pesos:** `GET /eventos/pesos/`
-- **Vacunaciones:** `GET /eventos/vacunaciones/`
-- **Dietas:** `GET /eventos/dietas/`
-- **Desparasitaciones:** `GET /eventos/desparasitaciones/`
-- **Laboratorios:** `GET /eventos/laboratorios/`
-- **Compraventas:** `GET /eventos/compraventas/`
-- **Traslados:** `GET /eventos/traslados/`
-- **Enfermedades:** `GET /eventos/enfermedades/`
-- **Tratamientos:** `GET /eventos/tratamientos/`
-
-También puedes filtrar por bovino: `GET /eventos/pesos/bovino/{bovino_id}`
-
-### Gestión de Documentos
-
-**Subir un archivo**
-
-`POST /files/upload`
-
-- **Content-Type:** `multipart/form-data`
-- **Parámetros:**
-  - `file`: Archivo a subir (PDF, imagen, etc.)
-  - `doc_type`: Tipo de documento (`identificacion`, `comprobante_domicilio`, `predio`, `cedula_veterinario`, `otro`)
-
-**Listar documentos**
-
-`GET /files/?skip=0&limit=100`
-
-Retorna lista de documentos con URLs prefirmadas válidas por 1 hora.
-
-## 🗂️ Estructura del Proyecto
-
-```
-backend_api/
-├── app/
-│   ├── main.py                 # Punto de entrada de la aplicación
-│   ├── database.py             # Configuración de la base de datos
-│   ├── models.py               # Modelos SQLAlchemy
-│   ├── schemas.py              # Esquemas Pydantic
-│   ├── auth.py                 # Lógica de autenticación
-│   ├── crud.py                 # Operaciones CRUD
-│   └── routers/                # Endpoints de la API
-│       ├── users.py            # Autenticación y usuarios
-│       ├── bovinos.py          # Gestión de ganado
-│       ├── eventos_main.py     # Creación de eventos
-│       ├── files.py            # Carga de archivos
-│       ├── domicilios.py       # Direcciones
-│       ├── predios.py          # Propiedades
-│       └── eventos/            # Consulta de eventos por tipo
-│           ├── pesos.py
-│           ├── vacunaciones.py
-│           ├── dietas.py
-│           └── ...
-├── db_schema.sql               # Esquema de base de datos
-├── docker-compose.yml          # Configuración de Docker
-├── Dockerfile                  # Imagen de Docker
-├── requirements.txt            # Dependencias Python
-├── .env                        # Variables de entorno
-├── .gitignore                  # Archivos ignorados por Git
-├── README.md                   # Este archivo
-└── API_DOCUMENTATION.md        # Documentación detallada de la API
-```
-
-## 🔌 Endpoints Principales
-
 | Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/signup` | Registrar nuevo usuario |
-| POST | `/login` | Iniciar sesión |
-| GET | `/users/me` | Obtener usuario actual |
-| GET/POST/PUT/DELETE | `/bovinos/` | CRUD de ganado |
-| POST | `/bovinos/{id}/upload-nose-photo` | Subir foto de nariz del bovino |
-| POST | `/eventos/` | Crear evento |
-| GET | `/eventos/{tipo}/` | Consultar eventos por tipo |
-| POST | `/files/upload` | Subir documento |
-| GET | `/files/` | Listar documentos |
-| GET/POST/PUT/DELETE | `/domicilios/` | CRUD de direcciones |
-| GET/POST/PUT/DELETE | `/predios/` | CRUD de propiedades |
+|---|---|---|
+| POST | `/signup` | Registro de usuario |
+| POST | `/signup/veterinario` | Registro de veterinario (multipart) |
+| POST | `/login` | Obtener token JWT |
+| GET | `/users/me` | Perfil del usuario autenticado |
 
-Para documentación completa de la API, consulta:
-- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- **Documentación detallada:** [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+### Bovinos
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/bovinos/` | Listar bovinos del usuario |
+| POST | `/bovinos/` | Registrar bovino |
+| GET | `/bovinos/{id}` | Detalle de bovino |
+| PUT | `/bovinos/{id}` | Actualizar bovino |
+| DELETE | `/bovinos/{id}` | Eliminar bovino |
+| POST | `/bovinos/{id}/upload-nose-photo` | Subir/reemplazar foto de nariz |
+| GET | `/bovinos/search` | Buscar por nombre, arete_barcode o arete_rfid (veterinarios) |
 
-## 🛠️ Desarrollo
+### Predios
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/predios/` | Listar predios del usuario |
+| POST | `/predios/` | Crear predio |
+| GET | `/predios/{id}` | Detalle de predio |
+| PUT | `/predios/{id}` | Actualizar predio |
+| DELETE | `/predios/{id}` | Eliminar predio |
+| GET | `/predios/{id}/bovinos` | Bovinos en ese predio |
+| POST | `/predios/{id}/upload-document` | Subir/reemplazar documento del predio |
 
-### Ejecutar en modo desarrollo
+### Domicilios
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/domicilios/` | Listar domicilios del usuario |
+| POST | `/domicilios/` | Crear domicilio |
+| GET | `/domicilios/{id}` | Detalle de domicilio |
+| PUT | `/domicilios/{id}` | Actualizar domicilio |
+| DELETE | `/domicilios/{id}` | Eliminar domicilio |
+| POST | `/domicilios/{id}/upload-document` | Subir/reemplazar comprobante de domicilio |
 
-```bash
-# Iniciar servicios
-docker-compose up
+### Documentos
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/files/` | Listar documentos del usuario (con URLs prefirmadas) |
+| POST | `/files/upload` | Subir/reemplazar documento genérico |
+| DELETE | `/files/{id}` | Eliminar documento (S3 + BD) |
 
-# Ver logs en tiempo real
-docker-compose logs -f backend
-
-# Reiniciar solo el backend
-docker-compose restart backend
-
-# Acceder al contenedor
-docker exec -it union_ganadera_backend bash
-```
-
-### Ejecutar migraciones de base de datos
-
-El esquema se inicializa automáticamente al arrancar el contenedor usando `db_schema.sql`. Para modificaciones:
-
-1. Edita `db_schema.sql`
-2. Elimina el volumen de la base de datos: `docker-compose down -v`
-3. Reinicia los servicios: `docker-compose up --build`
+### Eventos
+| Método | Endpoint | Descripción |
+|---|---|---|
+| POST | `/eventos/` | Crear evento (cualquier tipo) |
+| GET | `/eventos/pesos/` | Listar registros de peso |
+| GET | `/eventos/vacunaciones/` | Listar vacunaciones |
+| GET | `/eventos/dietas/` | Listar dietas |
+| GET | `/eventos/desparasitaciones/` | Listar desparasitaciones |
+| GET | `/eventos/laboratorios/` | Listar laboratorios |
+| GET | `/eventos/compraventas/` | Listar compraventas |
+| GET | `/eventos/traslados/` | Listar traslados |
+| GET | `/eventos/enfermedades/` | Listar enfermedades |
+| GET | `/eventos/tratamientos/` | Listar tratamientos |
+| GET | `/eventos/{tipo}/bovino/{bovino_id}` | Eventos de un tipo para un bovino específico |
 
 ---
 
-**Nota:** Este proyecto usa LocalStack para emular AWS S3 en desarrollo. Para producción, configura credenciales reales de AWS S3.
+## 🛠️ Comandos Útiles de Desarrollo
+
+```bash
+# Ver logs del backend en tiempo real
+docker-compose logs -f backend
+
+# Reiniciar solo el backend (aplica cambios de código)
+docker-compose restart backend
+
+# Acceder al contenedor del backend
+docker exec -it union_ganadera_backend bash
+
+# Acceder a la base de datos
+docker exec -it union_ganadera_db psql -U postgres -d union_ganadera
+
+# Listar archivos en el bucket S3
+docker exec union_ganadera_s3 aws --endpoint-url=http://localhost:4566 s3 ls s3://documentos --recursive
+```
+
+### Migraciones de base de datos
+
+El esquema se aplica automáticamente desde `db_schema.sql` solo al crear el volumen por primera vez. Para modificaciones en desarrollo:
+
+```bash
+# Opción A: Aplicar cambio en caliente (sin perder datos)
+docker exec union_ganadera_db psql -U postgres -d union_ganadera -c "ALTER TABLE ..."
+
+# Opción B: Recrear todos los datos desde cero
+docker-compose down -v
+docker-compose up --build -d
+```
+
+---
+
+## 📚 Documentación Adicional
+
+- **Swagger UI (interactiva):** http://localhost:8000/docs
+- **ReDoc:** http://localhost:8000/redoc
+- **Documentación detallada para integración Flutter:** [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+
+---
+
+> **Nota:** Este proyecto usa LocalStack para emular AWS S3 en entorno de desarrollo. Para producción, reemplaza `S3_ENDPOINT_URL` y `S3_PUBLIC_URL` con el endpoint real de AWS S3 y configura credenciales IAM válidas.

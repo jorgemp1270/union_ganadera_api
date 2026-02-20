@@ -1,22 +1,9 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi import UploadFile, HTTPException
-import boto3
-import os
 import uuid as uuid_lib
 from . import models, schemas, auth
-
-# S3 client configuration for file uploads
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
-
-s3_client = boto3.client(
-    "s3",
-    endpoint_url=S3_ENDPOINT_URL,
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_DEFAULT_REGION"),
-)
+from .s3 import s3_client, S3_BUCKET_NAME
 
 def get_user_by_username(db: Session, username: str):
     return db.query(models.Usuario).filter(models.Usuario.curp == username).first()
@@ -135,13 +122,19 @@ def create_veterinario(db: Session, veterinario: schemas.VeterinarioCreate, cedu
 
     return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
 
-def get_bovinos(db: Session, user_id: str, skip: int = 0, limit: int = 100):
-    return db.query(models.Bovino).filter(models.Bovino.usuario_id == user_id).offset(skip).limit(limit).all()
+def get_bovinos(db: Session, user_id: str, skip: int = 0, limit: int = 100, predio_id: str = None):
+    query = db.query(models.Bovino).filter(models.Bovino.usuario_id == user_id)
+    if predio_id:
+        query = query.filter(models.Bovino.predio_id == predio_id)
+    return query.offset(skip).limit(limit).all()
 
-def search_bovino(db: Session, arete_barcode: str = None, arete_rfid: str = None, nariz_storage_key: str = None):
+def get_bovinos_by_predio(db: Session, predio_id: str, skip: int = 0, limit: int = 100):
+    return db.query(models.Bovino).filter(models.Bovino.predio_id == predio_id).offset(skip).limit(limit).all()
+
+def search_bovino(db: Session, arete_barcode: str = None, arete_rfid: str = None, nombre: str = None):
     """
-    Search for a bovino by arete_barcode, arete_rfid, or nariz_storage_key.
-    Returns the first match found (priority: barcode > rfid > nariz).
+    Search for a bovino by arete_barcode, arete_rfid, or nombre.
+    Returns the first match found (priority: barcode > rfid > nombre).
     """
     query = db.query(models.Bovino)
 
@@ -149,8 +142,8 @@ def search_bovino(db: Session, arete_barcode: str = None, arete_rfid: str = None
         return query.filter(models.Bovino.arete_barcode == arete_barcode).first()
     elif arete_rfid:
         return query.filter(models.Bovino.arete_rfid == arete_rfid).first()
-    elif nariz_storage_key:
-        return query.filter(models.Bovino.nariz_storage_key == nariz_storage_key).first()
+    elif nombre:
+        return query.filter(models.Bovino.nombre.ilike(f"%{nombre}%")).first()
 
     return None
 
@@ -303,6 +296,29 @@ def create_documento(db: Session, documento_data: dict):
     db.refresh(db_documento)
     return db_documento
 
+def get_documento(db: Session, doc_id: str):
+    return db.query(models.Documento).filter(models.Documento.id == doc_id).first()
+
+def delete_documento(db: Session, doc_id: str):
+    db_documento = db.query(models.Documento).filter(models.Documento.id == doc_id).first()
+    if db_documento:
+        db.delete(db_documento)
+        db.commit()
+    return db_documento
+
+def get_documento_by_user_and_type(db: Session, user_id: str, doc_type):
+    """Return the single document a user has of a given type, or None."""
+    return db.query(models.Documento).filter(
+        models.Documento.usuario_id == user_id,
+        models.Documento.doc_type == doc_type
+    ).first()
+
+def get_documento_by_storage_prefix(db: Session, prefix: str):
+    """Return the document whose storage_key starts with the given prefix, or None."""
+    return db.query(models.Documento).filter(
+        models.Documento.storage_key.like(f"{prefix}%")
+    ).first()
+
 def get_documentos_by_user(db: Session, user_id: str, skip: int = 0, limit: int = 100):
     return db.query(models.Documento).filter(
         models.Documento.usuario_id == user_id
@@ -343,17 +359,17 @@ def delete_domicilio(db: Session, domicilio_id: str):
     return db_domicilio
 
 # Predio CRUD
-def get_predios(db: Session, skip: int = 0, limit: int = 100, domicilio_id: str = None):
+def get_predios(db: Session, skip: int = 0, limit: int = 100, usuario_id: str = None):
     query = db.query(models.Predio)
-    if domicilio_id:
-        query = query.filter(models.Predio.domicilio_id == domicilio_id)
+    if usuario_id:
+        query = query.filter(models.Predio.usuario_id == usuario_id)
     return query.offset(skip).limit(limit).all()
 
 def get_predio(db: Session, predio_id: str):
     return db.query(models.Predio).filter(models.Predio.id == predio_id).first()
 
-def create_predio(db: Session, predio: schemas.PredioCreate):
-    db_predio = models.Predio(**predio.dict())
+def create_predio(db: Session, predio: schemas.PredioCreate, usuario_id: str):
+    db_predio = models.Predio(**predio.dict(), usuario_id=usuario_id)
     db.add(db_predio)
     db.commit()
     db.refresh(db_predio)

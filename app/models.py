@@ -18,7 +18,8 @@ class RolEnum(str, enum.Enum):
     ban = "ban"
 
 class DocTypeEnum(str, enum.Enum):
-    identificacion = "identificacion"
+    identificacion_frente = "identificacion_frente"
+    identificacion_reverso = "identificacion_reverso"
     comprobante_domicilio = "comprobante_domicilio"
     predio = "predio"
     cedula_veterinario = "cedula_veterinario"
@@ -37,6 +38,7 @@ class Usuario(Base):
     bovinos = relationship("Bovino", back_populates="usuario", foreign_keys="[Bovino.usuario_id]")
     documentos = relationship("Documento", back_populates="usuario")
     domicilios = relationship("Domicilio", back_populates="usuario")
+    predios = relationship("Predio", back_populates="usuario")
 
 class Domicilio(Base):
     __tablename__ = "domicilios"
@@ -50,7 +52,6 @@ class Domicilio(Base):
     municipio = Column(String(50))
 
     usuario = relationship("Usuario", back_populates="domicilios")
-    predios = relationship("Predio", back_populates="domicilio")
 
 class DatosUsuario(Base):
     __tablename__ = "datos_usuario"
@@ -82,7 +83,7 @@ class Bovino(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"))
-    predio_id = Column(UUID(as_uuid=True), ForeignKey("predio.id"), nullable=True)
+    predio_id = Column(UUID(as_uuid=True), ForeignKey("predios.id"), nullable=True)
 
     arete_barcode = Column(String, unique=True)
     arete_rfid = Column(String, unique=True)
@@ -108,16 +109,16 @@ class Bovino(Base):
     predio = relationship("Predio", back_populates="bovinos")
 
 class Predio(Base):
-    __tablename__ = "predio"
+    __tablename__ = "predios"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    domicilio_id = Column(UUID(as_uuid=True), ForeignKey("domicilios.id"))
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
     clave_catastral = Column(String(50), unique=True)
     superficie_total = Column(Numeric(10, 2))
     latitud = Column(Numeric(9, 6))
     longitud = Column(Numeric(9, 6))
 
-    domicilio = relationship("Domicilio", back_populates="predios")
+    usuario = relationship("Usuario", back_populates="predios")
     bovinos = relationship("Bovino", back_populates="predio")
 
 class Evento(Base):

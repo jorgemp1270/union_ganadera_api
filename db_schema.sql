@@ -9,7 +9,7 @@ CREATE TYPE sexo_enum AS ENUM ('M', 'F', 'X');
 CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'admin', 'ban');
 
 -- Enum for document types
-CREATE TYPE doc_type_enum AS ENUM ('identificacion', 'comprobante_domicilio','predio', 'cedula_veterinario','nariz', 'otro');
+CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reverso', 'comprobante_domicilio', 'predio', 'cedula_veterinario', 'nariz', 'otro');
 
 -- 2. BASE TABLES
 -- ---------------------------------------------------------
@@ -51,9 +51,9 @@ CREATE TABLE veterinarios (
     cedula VARCHAR(50) NOT NULL UNIQUE
 );
 
-CREATE TABLE predio (
+CREATE TABLE predios (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    domicilio_id UUID REFERENCES domicilios(id),
+    usuario_id UUID NOT NULL REFERENCES usuarios(id),
     clave_catastral VARCHAR(50) UNIQUE,
     superficie_total DECIMAL(10, 2),
     latitud DECIMAL(9, 6),
@@ -78,7 +78,7 @@ CREATE TABLE documentos (
 CREATE TABLE bovinos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     usuario_id UUID REFERENCES usuarios(id),
-    predio_id UUID REFERENCES predio(id), -- This gets cleared on sale
+    predio_id UUID REFERENCES predios(id), -- This gets cleared on sale
 
     arete_barcode VARCHAR(50) UNIQUE,
     arete_rfid VARCHAR(50) UNIQUE,
@@ -162,8 +162,8 @@ CREATE TABLE compraventas (
 CREATE TABLE traslado (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     evento_id UUID NOT NULL REFERENCES eventos(id) ON DELETE CASCADE,
-    predio_anterior_id UUID REFERENCES predio(id),
-    predio_nuevo_id UUID REFERENCES predio(id)
+    predio_anterior_id UUID REFERENCES predios(id),
+    predio_nuevo_id UUID REFERENCES predios(id)
 );
 
 -- 7. MEDICAL / PATHOLOGY

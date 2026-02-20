@@ -182,6 +182,7 @@ All endpoints require authentication.
 **Query Parameters:**
 - `skip`: Pagination offset (default: 0)
 - `limit`: Number of records (default: 100)
+- `predio_id`: Optional UUID - filter cattle belonging to a specific predio
 
 **Response:** `200 OK`
 ```json
@@ -197,6 +198,8 @@ All endpoints require authentication.
     "peso_nac": 35.5,
     "peso_actual": 450.0,
     "proposito": "Engorda",
+    "nariz_storage_key": null,
+    "nariz_url": null,
     "status": "activo"
   }
 ]
@@ -226,6 +229,8 @@ All endpoints require authentication.
   "peso_nac": 35.5,
   "peso_actual": 450.0,
   "proposito": "Engorda",
+  "nariz_storage_key": null,
+  "nariz_url": null,
   "status": "activo"
 }
 ```
@@ -250,7 +255,7 @@ All endpoints require authentication.
 **Query Parameters (at least one required):**
 - `arete_barcode`: String - Search by barcode tag
 - `arete_rfid`: String - Search by RFID tag
-- `nariz_storage_key`: String - Search by nose photo storage key
+- `nombre`: String - Search by name (partial, case-insensitive)
 
 **Example Request:**
 ```
@@ -267,6 +272,8 @@ GET /bovinos/search?arete_barcode=MX123456789
   "nombre": "Torito",
   "raza_dominante": "Angus",
   "peso_actual": 450.0,
+  "nariz_storage_key": null,
+  "nariz_url": null,
   "status": "activo"
 }
 ```
@@ -276,7 +283,7 @@ GET /bovinos/search?arete_barcode=MX123456789
 - `403 Forbidden` - User is not a veterinarian
 - `404 Not Found` - No bovino found with provided identifier
 
-**Use Case:** Veterinarians use this endpoint to find cattle before creating veterinary events (vaccinations, treatments, etc.). The cattle owner provides their arete barcode or RFID, and the vet searches to get the `bovino_id` for event creation.
+**Use Case:** Veterinarians use this endpoint to find cattle before creating veterinary events (vaccinations, treatments, etc.). The cattle owner provides their arete barcode, RFID, or name, and the vet searches to get the `bovino_id` for event creation.
 
 ---
 
@@ -320,6 +327,7 @@ GET /bovinos/search?arete_barcode=MX123456789
   "arete_barcode": "MX123456789",
   "arete_rfid": "RFID001122",
   "nariz_storage_key": null,
+  "nariz_url": null,
   "madre_id": "uuid-madre",
   "padre_id": "uuid-padre",
   "predio_id": "uuid-predio",
@@ -338,6 +346,7 @@ GET /bovinos/search?arete_barcode=MX123456789
 - `sexo`: enum: "M", "F", "X"
 - `arete_barcode`, `arete_rfid`: Must be unique if provided
 - `nombre`: Optional name for the animal
+- `predio_id`: Must belong to the authenticated user if provided
 - **`usuario_original_id`:** Automatically set to the authenticated user's ID who creates the bovino. This field cannot be modified and permanently tracks the original registrant, even if ownership is transferred via sale.
 - **`usuario_id`:** Initially set to the authenticated user's ID. This field changes when the bovino is sold (compraventa event).
 
@@ -362,6 +371,7 @@ GET /bovinos/search?arete_barcode=MX123456789
   "usuario_original_id": "550e8400-e29b-41d4-a716-446655440000",
   "nombre": "Torito",
   "nariz_storage_key": "550e8400-e29b-41d4-a716-446655440000/nariz/b7d3a8e9-1234-5678-9abc-def012345678/a1b2c3d4-uuid.jpg",
+  "nariz_url": "http://localhost:4566/documentos/550e8400-.../nariz/.../a1b2c3d4-uuid.jpg?X-Amz-Algorithm=...",
   "arete_barcode": "MX123456789",
   "raza_dominante": "Angus",
   "status": "activo"
@@ -391,7 +401,7 @@ GET /bovinos/search?arete_barcode=MX123456789
 
 **Updatable Fields:**
 - `arete_barcode`, `arete_rfid`, `nombre`
-- `madre_id`, `padre_id`, `predio_id`
+- `madre_id`, `padre_id`, `predio_id` (must belong to the authenticated user)
 - `raza_dominante`, `fecha_nac`, `sexo`
 - `peso_nac`, `peso_actual`, `proposito`
 
@@ -801,11 +811,19 @@ Each event type has dedicated endpoints for retrieving detailed information with
 [
   {
     "id": "doc-uuid-1",
-    "doc_type": "identificacion",
-    "original_filename": "INE_JohnDoe.pdf",
+    "doc_type": "identificacion_frente",
+    "original_filename": "INE_JohnDoe_frente.jpg",
     "created_at": "2026-01-23T14:30:00Z",
     "authored": false,
-    "download_url": "http://localhost:4566/documentos/user-uuid/identificacion/filename.pdf?X-Amz-Algorithm=..."
+    "download_url": "http://localhost:4566/documentos/user-uuid/identificacion_frente/filename.jpg?X-Amz-Algorithm=..."
+  },
+  {
+    "id": "doc-uuid-2b",
+    "doc_type": "identificacion_reverso",
+    "original_filename": "INE_JohnDoe_reverso.jpg",
+    "created_at": "2026-01-23T14:31:00Z",
+    "authored": false,
+    "download_url": "http://localhost:4566/documentos/user-uuid/identificacion_reverso/filename.jpg?X-Amz-Algorithm=..."
   },
   {
     "id": "doc-uuid-2",
@@ -839,7 +857,8 @@ Each event type has dedicated endpoints for retrieving detailed information with
 - `doc_type`: Type of document (see enum below)
 
 **Document Types (doc_type):**
-- `identificacion`
+- `identificacion_frente` — Front side of ID (INE, passport, etc.)
+- `identificacion_reverso` — Back side of ID
 - `comprobante_domicilio`
 - `predio`
 - `cedula_veterinario`
@@ -849,8 +868,8 @@ Each event type has dedicated endpoints for retrieving detailed information with
 ```json
 {
   "id": "doc-uuid",
-  "doc_type": "identificacion",
-  "original_filename": "INE_JohnDoe.pdf",
+  "doc_type": "identificacion_frente",
+  "original_filename": "INE_JohnDoe_frente.jpg",
   "created_at": "2026-01-23T14:30:00Z",
   "authored": false
 }
@@ -861,9 +880,9 @@ Each event type has dedicated endpoints for retrieving detailed information with
 FormData formData = FormData.fromMap({
   'file': await MultipartFile.fromFile(
     filePath,
-    filename: 'document.pdf',
+    filename: 'INE_frente.jpg',
   ),
-  'doc_type': 'identificacion',
+  'doc_type': 'identificacion_frente', // or 'identificacion_reverso'
 });
 
 Response response = await dio.post(
@@ -876,15 +895,61 @@ Response response = await dio.post(
 ```
 
 **Storage Structure:**
-Files are stored in S3 with the following key pattern:
+Files are stored in S3 with the following key patterns:
 ```
+# Generic upload
 {user_id}/{doc_type}/{uuid}.{extension}
+
+# Domicilio-scoped upload
+{user_id}/comprobante_domicilio/{domicilio_id}/{uuid}.{extension}
+
+# Predio-scoped upload
+{user_id}/predio/{predio_id}/{uuid}.{extension}
+
+# Bovino nose photo
+{user_id}/nariz/{bovino_id}/{uuid}.{extension}
 ```
 
 **Document Authorization:**
 - Documents are created with `authored: false` by default
 - In future releases, admin users will be able to review and authorize documents
 - The `authored` field tracks whether an admin has verified/approved the document
+
+**One Document Per Slot (Upsert Behavior):**
+Each upload endpoint enforces a single document per logical slot. If a document already exists for that slot, the old file is deleted from S3 and replaced in the database automatically:
+- `POST /files/upload` — one document per `(user, doc_type)` pair. Re-uploading `identificacion_frente`, `identificacion_reverso`, or `cedula_veterinario` replaces the previous file.
+- `POST /domicilios/{domicilio_id}/upload-document` — one `comprobante_domicilio` per domicilio.
+- `POST /predios/{predio_id}/upload-document` — one property document per predio.
+- `POST /bovinos/{bovino_id}/upload-nose-photo` — one nose photo per bovino.
+
+---
+
+### 3. Delete Document
+
+**Endpoint:** `DELETE /files/{doc_id}`
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Path Parameters:**
+- `doc_id`: UUID of the document to delete
+
+**Response:** `200 OK` (Returns the deleted document object)
+```json
+{
+  "id": "doc-uuid",
+  "doc_type": "identificacion_frente",
+  "original_filename": "INE_JohnDoe_frente.jpg",
+  "created_at": "2026-01-23T14:30:00Z",
+  "authored": false
+}
+```
+
+**Error Responses:**
+- `403 Forbidden` - Document does not belong to the current user
+- `404 Not Found` - Document not found
+- `500 Internal Server Error` - S3 deletion failed
+
+**Note:** Deletes the file from both S3 storage and the database. This is permanent and cannot be undone. Note that re-uploading to the same endpoint automatically replaces the existing document, so manual deletion before re-upload is not necessary.
 
 ---
 
@@ -996,27 +1061,71 @@ All domicilio operations require authentication and ownership verification.
 
 ---
 
+### 6. Upload Proof of Address Document
+
+**Endpoint:** `POST /domicilios/{domicilio_id}/upload-document`
+
+**Headers:**
+- `Authorization: Bearer {token}`
+- `Content-Type: multipart/form-data`
+
+**Form Data:**
+- `file`: The file to upload (PDF, image, etc.)
+
+**Response:** `200 OK`
+```json
+{
+  "id": "doc-uuid",
+  "doc_type": "comprobante_domicilio",
+  "original_filename": "comprobante.pdf",
+  "created_at": "2026-01-23T14:30:00Z",
+  "authored": false
+}
+```
+
+**Error Responses:**
+- `403 Forbidden` - Domicilio does not belong to the current user
+- `404 Not Found` - Domicilio not found
+- `500 Internal Server Error` - S3 upload failed
+
+**Storage Key:**
+```
+{user_id}/comprobante_domicilio/{domicilio_id}/{uuid}.{extension}
+```
+
+**Flutter Example:**
+```dart
+var request = http.MultipartRequest(
+  'POST',
+  Uri.parse('$baseUrl/domicilios/$domicilioId/upload-document'),
+);
+request.headers['Authorization'] = 'Bearer $token';
+request.files.add(await http.MultipartFile.fromPath('file', filePath));
+final response = await request.send();
+```
+
+---
+
 ## Predios (Properties)
 
-All predio operations require authentication. Predios are linked to domicilios, and ownership is verified through the associated domicilio.
+All predio operations require authentication. Predios are directly linked to the authenticated user.
 
 ### 1. List Predios
 
-**Endpoint:** `GET /predios/?skip=0&limit=100&domicilio_id={uuid}`
+**Endpoint:** `GET /predios/?skip=0&limit=100`
 
 **Headers:** `Authorization: Bearer {token}`
 
 **Query Parameters:**
 - `skip`: Pagination offset (default: 0)
 - `limit`: Number of records (default: 100)
-- `domicilio_id`: Optional filter by domicilio UUID
 
 **Response:** `200 OK`
 ```json
 [
   {
     "id": "predio-uuid-1",
-    "domicilio_id": "dom-uuid",
+    "usuario_id": "user-uuid",
     "clave_catastral": "CAT123456",
     "superficie_total": 150.5,
     "latitud": 19.432608,
@@ -1053,7 +1162,6 @@ All predio operations require authentication. Predios are linked to domicilios, 
 **Request Body:**
 ```json
 {
-  "domicilio_id": "dom-uuid",
   "clave_catastral": "CAT123456",
   "superficie_total": 150.5,
   "latitud": 19.432608,
@@ -1061,11 +1169,9 @@ All predio operations require authentication. Predios are linked to domicilios, 
 }
 ```
 
-**Response:** `200 OK` (Returns created predio object)
+**Response:** `200 OK` (Returns created predio object with `usuario_id`)
 
-**Validation:**
-- If `domicilio_id` is provided, it must belong to the current user
-- All fields are optional
+**Note:** All fields are optional. Ownership is assigned automatically from the authenticated user.
 
 ---
 
@@ -1103,6 +1209,88 @@ All predio operations require authentication. Predios are linked to domicilios, 
 **Response:** `200 OK` (Returns deleted predio object)
 
 **Note:** Bovinos linked to this predio will have their `predio_id` set to NULL.
+
+---
+
+### 5.5. Get Cattle in a Predio
+
+**Endpoint:** `GET /predios/{predio_id}/bovinos`
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Query Parameters:**
+- `skip`: Pagination offset (default: 0)
+- `limit`: Number of records (default: 100)
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "b7d3a8e9-1234-5678-9abc-def012345678",
+    "usuario_id": "user-uuid",
+    "predio_id": "predio-uuid",
+    "nombre": "Torito",
+    "arete_barcode": "MX123456789",
+    "raza_dominante": "Angus",
+    "sexo": "M",
+    "peso_actual": 450.0,
+    "nariz_storage_key": null,
+    "nariz_url": null,
+    "status": "activo"
+  }
+]
+```
+
+**Error Responses:**
+- `403 Forbidden` - Predio does not belong to the current user
+- `404 Not Found` - Predio not found
+
+**Note:** Equivalent to `GET /bovinos/?predio_id={predio_id}` but scoped under the predio resource.
+
+---
+
+### 6. Upload Predio Document
+
+**Endpoint:** `POST /predios/{predio_id}/upload-document`
+
+**Headers:**
+- `Authorization: Bearer {token}`
+- `Content-Type: multipart/form-data`
+
+**Form Data:**
+- `file`: The file to upload (PDF, image, etc.)
+
+**Response:** `200 OK`
+```json
+{
+  "id": "doc-uuid",
+  "doc_type": "predio",
+  "original_filename": "titulo_propiedad.pdf",
+  "created_at": "2026-01-23T14:30:00Z",
+  "authored": false
+}
+```
+
+**Error Responses:**
+- `403 Forbidden` - Predio does not belong to the current user
+- `404 Not Found` - Predio not found
+- `500 Internal Server Error` - S3 upload failed
+
+**Storage Key:**
+```
+{user_id}/predio/{predio_id}/{uuid}.{extension}
+```
+
+**Flutter Example:**
+```dart
+var request = http.MultipartRequest(
+  'POST',
+  Uri.parse('$baseUrl/predios/$predioId/upload-document'),
+);
+request.headers['Authorization'] = 'Bearer $token';
+request.files.add(await http.MultipartFile.fromPath('file', filePath));
+final response = await request.send();
+```
 
 ---
 
@@ -1159,7 +1347,8 @@ All predio operations require authentication. Predios are linked to domicilios, 
 - `ban` - Banned
 
 **DocTypeEnum:**
-- `identificacion` - ID document
+- `identificacion_frente` - Front side of ID document (INE, passport, etc.)
+- `identificacion_reverso` - Back side of ID document
 - `comprobante_domicilio` - Proof of address
 - `predio` - Property document
 - `cedula_veterinario` - Veterinary license

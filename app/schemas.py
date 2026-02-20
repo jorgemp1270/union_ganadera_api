@@ -10,7 +10,8 @@ class SexoEnum(str, Enum):
     X = "X"
 
 class DocTypeEnum(str, Enum):
-    identificacion = "identificacion"
+    identificacion_frente = "identificacion_frente"
+    identificacion_reverso = "identificacion_reverso"
     comprobante_domicilio = "comprobante_domicilio"
     predio = "predio"
     cedula_veterinario = "cedula_veterinario"
@@ -97,6 +98,7 @@ class BovinoResponse(BovinoBase):
     usuario_id: UUID
     usuario_original_id: Optional[UUID] = None
     nariz_storage_key: Optional[str] = None
+    nariz_url: Optional[str] = None
     status: str
 
     class Config:
@@ -245,7 +247,6 @@ class DomicilioResponse(DomicilioBase):
 
 # Predio Schemas
 class PredioBase(BaseModel):
-    domicilio_id: Optional[UUID] = None
     clave_catastral: Optional[str] = None
     superficie_total: Optional[float] = None
     latitud: Optional[float] = None
@@ -259,6 +260,7 @@ class PredioUpdate(PredioBase):
 
 class PredioResponse(PredioBase):
     id: UUID
+    usuario_id: UUID
 
     class Config:
         from_attributes = True
