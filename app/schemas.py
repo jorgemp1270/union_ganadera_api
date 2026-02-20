@@ -15,6 +15,7 @@ class DocTypeEnum(str, Enum):
     comprobante_domicilio = "comprobante_domicilio"
     predio = "predio"
     cedula_veterinario = "cedula_veterinario"
+    fierro = "fierro"
     otro = "otro"
 
 # User Schemas
@@ -99,6 +100,7 @@ class BovinoResponse(BovinoBase):
     usuario_original_id: Optional[UUID] = None
     nariz_storage_key: Optional[str] = None
     nariz_url: Optional[str] = None
+    folio: Optional[str] = None
     status: str
 
     class Config:
@@ -202,6 +204,7 @@ class TrasladoDetailResponse(EventoResponse):
     predio_nuevo_id: Optional[UUID] = None
 
 class EnfermedadDetailResponse(EventoResponse):
+    enfermedad_id: Optional[UUID] = None
     veterinario_id: Optional[UUID] = None
     tipo: Optional[str] = None
 

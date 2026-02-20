@@ -23,6 +23,7 @@ class DocTypeEnum(str, enum.Enum):
     comprobante_domicilio = "comprobante_domicilio"
     predio = "predio"
     cedula_veterinario = "cedula_veterinario"
+    fierro = "fierro"
     otro = "otro"
 
 class Usuario(Base):
@@ -88,6 +89,7 @@ class Bovino(Base):
     arete_barcode = Column(String, unique=True)
     arete_rfid = Column(String, unique=True)
     nariz_storage_key = Column(String, unique=True, nullable=True)
+    folio = Column(String(7), unique=True, nullable=True)
 
     madre_id = Column(UUID(as_uuid=True), ForeignKey("bovinos.id"), nullable=True)
     padre_id = Column(UUID(as_uuid=True), ForeignKey("bovinos.id"), nullable=True)
@@ -206,7 +208,7 @@ class Tratamiento(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"))
-    enfermedad_id = Column(UUID(as_uuid=True))
+    enfermedad_id = Column(UUID(as_uuid=True), ForeignKey("enfermedades.id"), nullable=True)
     veterinario_id = Column(UUID(as_uuid=True))
     medicamento = Column(String(100))
     dosis = Column(String(50))

@@ -291,6 +291,7 @@ docker-compose down -v
 ### Ganado Bovino
 - CRUD completo con todos los campos productivos (raza, sexo, peso, propósito, etc.)
 - Identificación por arete (código de barras y RFID)
+- Folio auto-generado de 7 caracteres alfanuméricos en mayúsculas (ej. `A3B7X2K`), único por bovino, asignado en el registro
 - Foto de nariz como identificador biométrico (almacenada en S3, se reemplaza automáticamente al re-subir)
 - Respuestas incluyen `nariz_url` (URL prefirmada con vigencia de 1 hora)
 - Búsqueda por nombre o arete — solo veterinarios
@@ -309,7 +310,7 @@ docker-compose down -v
 - Carga de documento de predio: `POST /predios/{id}/upload-document`
 - Carga de foto de nariz: `POST /bovinos/{id}/upload-nose-photo`
 - Eliminación: `DELETE /files/{doc_id}` (borra de S3 y de la base de datos)
-- **Comportamiento upsert:** re-subir a cualquier endpoint reemplaza el archivo anterior automáticamente
+- **Comportamiento upsert:** re-subir a cualquier endpoint reemplaza el archivo anterior automáticamente. **Excepción: `fierro`** admite múltiples archivos por usuario; subir un fierro adicional no elimina los anteriores.
 - URLs prefirmadas con validez de 1 hora en todas las respuestas
 
 **Tipos de documento (`doc_type`):**
@@ -321,6 +322,7 @@ docker-compose down -v
 | `comprobante_domicilio` | Comprobante de domicilio (por domicilio) |
 | `predio` | Documento de propiedad (por predio) |
 | `cedula_veterinario` | Cédula profesional veterinaria |
+| `fierro` | Foto de fierro / marca. Permite **múltiples** cargas por usuario |
 | `otro` | Otro documento general |
 
 ### Sistema de Eventos
@@ -375,8 +377,8 @@ flowchart TD
 | `vacunacion` | Solo veterinario | Registro de vacuna con próxima fecha |
 | `desparasitacion` | Solo veterinario | Control de desparasitantes |
 | `laboratorio` | Solo veterinario | Resultados de análisis clínicos |
-| `enfermedad` | Solo veterinario | Diagnóstico de enfermedad |
-| `tratamiento` | Solo veterinario | Medicamento o procedimiento |
+| `enfermedad` | Solo veterinario | Diagnóstico de enfermedad. Cambia automáticamente el `status` del bovino a `"enfermo"`. Las respuestas GET incluyen `enfermedad_id` para enlazar tratamientos |
+| `tratamiento` | Solo veterinario | Medicamento o procedimiento. Requiere `enfermedad_id` válido del mismo bovino |
 
 Los veterinarios pueden registrar eventos para **cualquier** bovino del sistema; los usuarios regulares solo para los propios.
 
@@ -459,6 +461,7 @@ sequenceDiagram
 | GET | `/eventos/compraventas/` | Listar compraventas |
 | GET | `/eventos/traslados/` | Listar traslados |
 | GET | `/eventos/enfermedades/` | Listar enfermedades |
+| GET | `/eventos/enfermedades/{enfermedad_id}/tratamientos` | Tratamientos de una enfermedad específica |
 | GET | `/eventos/tratamientos/` | Listar tratamientos |
 | GET | `/eventos/{tipo}/bovino/{bovino_id}` | Eventos de un tipo para un bovino específico |
 

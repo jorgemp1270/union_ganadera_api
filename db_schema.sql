@@ -9,7 +9,7 @@ CREATE TYPE sexo_enum AS ENUM ('M', 'F', 'X');
 CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'admin', 'ban');
 
 -- Enum for document types
-CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reverso', 'comprobante_domicilio', 'predio', 'cedula_veterinario', 'nariz', 'otro');
+CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reverso', 'comprobante_domicilio', 'predio', 'cedula_veterinario', 'nariz', 'fierro', 'otro');
 
 -- 2. BASE TABLES
 -- ---------------------------------------------------------
@@ -83,6 +83,7 @@ CREATE TABLE bovinos (
     arete_barcode VARCHAR(50) UNIQUE,
     arete_rfid VARCHAR(50) UNIQUE,
     nariz_storage_key TEXT UNIQUE,
+    folio VARCHAR(7) UNIQUE NOT NULL,
 
     madre_id UUID REFERENCES bovinos(id),
     padre_id UUID REFERENCES bovinos(id),
@@ -556,6 +557,8 @@ BEGIN
     INSERT INTO enfermedades (evento_id, veterinario_id, tipo)
     VALUES (_evento_id, _vet_id, _tipo)
     RETURNING id INTO _enfermedad_id;
+
+    UPDATE bovinos SET status = 'enfermo' WHERE id = _bovino_id;
 
     -- Return Disease ID so the frontend can immediately link a treatment to it
     RETURN _enfermedad_id;

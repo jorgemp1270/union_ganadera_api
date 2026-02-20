@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi import UploadFile, HTTPException
 import uuid as uuid_lib
+import secrets
+import string
 from . import models, schemas, auth
 from .s3 import s3_client, S3_BUCKET_NAME
 
@@ -150,8 +152,17 @@ def search_bovino(db: Session, arete_barcode: str = None, arete_rfid: str = None
 def get_bovino(db: Session, bovino_id: str):
     return db.query(models.Bovino).filter(models.Bovino.id == bovino_id).first()
 
+_FOLIO_ALPHABET = string.ascii_uppercase + string.digits
+
+def _generate_folio() -> str:
+    return ''.join(secrets.choice(_FOLIO_ALPHABET) for _ in range(7))
+
 def create_bovino(db: Session, bovino: schemas.BovinoCreate, user_id: str):
-    db_bovino = models.Bovino(**bovino.dict(), usuario_id=user_id, usuario_original_id=user_id)
+    for _ in range(10):
+        folio = _generate_folio()
+        if not db.query(models.Bovino).filter(models.Bovino.folio == folio).first():
+            break
+    db_bovino = models.Bovino(**bovino.dict(), usuario_id=user_id, usuario_original_id=user_id, folio=folio)
     db.add(db_bovino)
     db.commit()
     db.refresh(db_bovino)
@@ -249,10 +260,19 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
                        {"eid": enfermedad_id}).scalar()
 
     elif etype == 'tratamiento':
+        # Validate that the referenced enfermedad belongs to the same bovino
+        enfermedad_id_param = data.get('enfermedad_id')
+        if enfermedad_id_param:
+            enf_bovino = db.execute(
+                text("SELECT bovino_id FROM eventos WHERE id = (SELECT evento_id FROM enfermedades WHERE id = :eid)"),
+                {"eid": enfermedad_id_param}
+            ).scalar()
+            if enf_bovino and str(enf_bovino) != str(bovino_id):
+                raise HTTPException(status_code=400, detail="La enfermedad no pertenece al mismo bovino")
         # registrar_tratamiento(_bovino_id, _enfermedad_id, _usuario_id, _medicamento, _dosis, _periodo, _fecha, _observaciones)
         q = text("SELECT registrar_tratamiento(:bid, :eid, :uid, :med, :dosis, :periodo, NOW(), :obs)")
         eid = db.execute(q, {
-            "bid": bovino_id, "eid": data.get('enfermedad_id'), "uid": data.get('usuario_id'),
+            "bid": bovino_id, "eid": enfermedad_id_param, "uid": data.get('usuario_id'),
             "med": data.get('medicamento'), "dosis": data.get('dosis'),
             "periodo": data.get('periodo'), "obs": observaciones
         }).scalar()
@@ -639,7 +659,7 @@ def get_enfermedades_by_user(db: Session, user_id: str, skip: int = 0, limit: in
     ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
 
     return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
-             "veterinario_id": enf.veterinario_id, "tipo": enf.tipo} for e, enf in results]
+             "enfermedad_id": enf.id, "veterinario_id": enf.veterinario_id, "tipo": enf.tipo} for e, enf in results]
 
 def get_enfermedades_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit: int = 100):
     results = db.query(models.Evento, models.Enfermedad).join(
@@ -649,7 +669,7 @@ def get_enfermedades_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit
     ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
 
     return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
-             "veterinario_id": enf.veterinario_id, "tipo": enf.tipo} for e, enf in results]
+             "enfermedad_id": enf.id, "veterinario_id": enf.veterinario_id, "tipo": enf.tipo} for e, enf in results]
 
 def get_enfermedad_detail(db: Session, evento_id: str):
     result = db.query(models.Evento, models.Enfermedad).join(
@@ -660,7 +680,7 @@ def get_enfermedad_detail(db: Session, evento_id: str):
         return None
     e, enf = result
     return {"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
-            "veterinario_id": enf.veterinario_id, "tipo": enf.tipo}
+            "enfermedad_id": enf.id, "veterinario_id": enf.veterinario_id, "tipo": enf.tipo}
 
 def get_tratamientos_by_user(db: Session, user_id: str, skip: int = 0, limit: int = 100):
     results = db.query(models.Evento, models.Tratamiento).join(
@@ -697,3 +717,14 @@ def get_tratamiento_detail(db: Session, evento_id: str):
     return {"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
             "enfermedad_id": t.enfermedad_id, "veterinario_id": t.veterinario_id,
             "medicamento": t.medicamento, "dosis": t.dosis, "periodo": t.periodo}
+
+def get_tratamientos_by_enfermedad(db: Session, enfermedad_id: str, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Tratamiento).join(
+        models.Tratamiento, models.Evento.id == models.Tratamiento.evento_id
+    ).filter(
+        models.Tratamiento.enfermedad_id == enfermedad_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "enfermedad_id": t.enfermedad_id, "veterinario_id": t.veterinario_id,
+             "medicamento": t.medicamento, "dosis": t.dosis, "periodo": t.periodo} for e, t in results]

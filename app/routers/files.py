@@ -49,13 +49,15 @@ async def upload_file(
     db: Session = Depends(database.get_db)
 ):
     # Replace existing document of the same type if one already exists
-    existing = crud.get_documento_by_user_and_type(db, user_id=str(current_user.id), doc_type=doc_type)
-    if existing:
-        try:
-            s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=existing.storage_key)
-        except Exception:
-            pass
-        crud.delete_documento(db=db, doc_id=str(existing.id))
+    # fierro is the only type that allows multiple uploads per user
+    if doc_type != schemas.DocTypeEnum.fierro:
+        existing = crud.get_documento_by_user_and_type(db, user_id=str(current_user.id), doc_type=doc_type)
+        if existing:
+            try:
+                s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=existing.storage_key)
+            except Exception:
+                pass
+            crud.delete_documento(db=db, doc_id=str(existing.id))
 
     file_extension = os.path.splitext(file.filename)[1]
     storage_key = f"{current_user.id}/{doc_type.value}/{uuid.uuid4()}{file_extension}"
