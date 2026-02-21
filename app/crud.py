@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi import UploadFile, HTTPException
+import os
 import uuid as uuid_lib
 import secrets
 import string
