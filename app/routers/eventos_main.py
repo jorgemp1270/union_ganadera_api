@@ -40,6 +40,17 @@ async def create_evento(evento: schemas.EventoCreateRequest,
                 detail="Not authorized to add events to this bovino. Only the owner can create this event type."
             )
 
+        # Compraventa-specific: the vendedor must be the requesting user
+        if evento.type == 'compraventa':
+            vendedor_curp = evento.data.get('vendedor_curp')
+            if vendedor_curp is None:
+                raise HTTPException(status_code=422, detail="vendedor_curp is required for compraventa events")
+            if vendedor_curp != current_user.curp:
+                raise HTTPException(
+                    status_code=403,
+                    detail="vendedor_curp must match the authenticated user's CURP"
+                )
+
     db_evento = crud.create_evento(db, evento)
     if db_evento is None:
         raise HTTPException(status_code=500, detail="Failed to create event")

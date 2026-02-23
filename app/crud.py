@@ -233,11 +233,11 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
         }).scalar()
 
     elif etype == 'compraventa':
-        # registrar_compraventa(_bovino_id, _comprador_id, _vendedor_id, _fecha, _observaciones)
+        # registrar_compraventa(_bovino_id, _comprador_curp, _vendedor_curp, _fecha, _observaciones)
         q = text("SELECT registrar_compraventa(:bid, :cid, :vid, NOW(), :obs)")
         eid = db.execute(q, {
-            "bid": bovino_id, "cid": data.get('comprador_id'),
-            "vid": data.get('vendedor_id'), "obs": observaciones
+            "bid": bovino_id, "cid": data.get('comprador_curp'),
+            "vid": data.get('vendedor_curp'), "obs": observaciones
         }).scalar()
 
     elif etype == 'traslado':
@@ -346,6 +346,49 @@ def get_documentos_by_user(db: Session, user_id: str, skip: int = 0, limit: int 
     ).order_by(
         models.Documento.created_at.desc()
     ).offset(skip).limit(limit).all()
+
+def get_documentos_pendientes(db: Session, skip: int = 0, limit: int = 100):
+    """All documents across all users that have not yet been approved (authored=False)."""
+    return db.query(models.Documento).filter(
+        models.Documento.authored == False
+    ).order_by(
+        models.Documento.created_at.asc()
+    ).offset(skip).limit(limit).all()
+
+def get_all_documentos(db: Session, skip: int = 0, limit: int = 100):
+    """All documents across all users, ordered newest first (admin view)."""
+    return db.query(models.Documento).order_by(
+        models.Documento.created_at.desc()
+    ).offset(skip).limit(limit).all()
+
+def get_ultima_revision(db: Session, doc_id: str):
+    """Return the most recent revision for a document, or None."""
+    return db.query(models.DocumentoRevision).filter(
+        models.DocumentoRevision.documento_id == doc_id
+    ).order_by(
+        models.DocumentoRevision.fecha.desc()
+    ).first()
+
+def get_revisiones_by_documento(db: Session, doc_id: str):
+    """Return full revision history for a document, newest first."""
+    return db.query(models.DocumentoRevision).filter(
+        models.DocumentoRevision.documento_id == doc_id
+    ).order_by(
+        models.DocumentoRevision.fecha.desc()
+    ).all()
+
+def create_revision(db: Session, doc_id: str, admin_id: str, status: models.DocReviewStatusEnum, comentario: str | None):
+    """Insert a revision row. The DB trigger will sync documentos.authored automatically."""
+    revision = models.DocumentoRevision(
+        documento_id=doc_id,
+        admin_id=admin_id,
+        status=status,
+        comentario=comentario
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    return revision
 
 # Domicilio CRUD
 def get_domicilios_by_user(db: Session, user_id: str, skip: int = 0, limit: int = 100):

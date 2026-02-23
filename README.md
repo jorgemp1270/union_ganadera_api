@@ -297,6 +297,7 @@ docker-compose down -v
 - Búsqueda por nombre o arete — solo veterinarios
 - Registro de propietario actual (`usuario_id`) y propietario original inmutable (`usuario_original_id`)
 - Asignación a predio específico (`predio_id`)
+- **Proyección de progenitores:** `GET /bovinos/{id}` resuelve `madre_id`/`padre_id` en objetos `madre`/`padre` con campos públicos seguros (`id`, `folio`, `raza_dominante`, `fecha_nac`, `sexo`). Si el progenitor pertenece a otro usuario (post-venta), solo se exponen esos campos mínimos.
 
 ### Predios y Domicilios
 - CRUD de predios con clave catastral, superficie y coordenadas GPS
@@ -308,10 +309,12 @@ docker-compose down -v
 - Carga genérica: `POST /files/upload` con campo `doc_type`
 - Carga de comprobante de domicilio: `POST /domicilios/{id}/upload-document`
 - Carga de documento de predio: `POST /predios/{id}/upload-document`
+- Consulta de documento de predio: `GET /predios/{id}/document` (devuelve URL prefirmada)
 - Carga de foto de nariz: `POST /bovinos/{id}/upload-nose-photo`
 - Eliminación: `DELETE /files/{doc_id}` (borra de S3 y de la base de datos)
-- **Comportamiento upsert:** re-subir a cualquier endpoint reemplaza el archivo anterior automáticamente. **Excepción: `fierro`** admite múltiples archivos por usuario; subir un fierro adicional no elimina los anteriores.
+- **Comportamiento upsert:** re-subir a cualquier endpoint reemplaza el archivo anterior automáticamente y reinicia el historial de revisiones. **Excepción: `fierro`** admite múltiples archivos por usuario.
 - URLs prefirmadas con validez de 1 hora en todas las respuestas
+- **Revisión de documentos:** los administradores pueden aprobar o rechazar documentos con `POST /files/{id}/review`. El campo `authored` se actualiza automáticamente vía trigger. Los usuarios ven el estado y comentarios de la última revisión en el campo `ultima_revision` de cada respuesta de documento.
 
 **Tipos de documento (`doc_type`):**
 
@@ -431,6 +434,7 @@ sequenceDiagram
 | DELETE | `/predios/{id}` | Eliminar predio |
 | GET | `/predios/{id}/bovinos` | Bovinos en ese predio |
 | POST | `/predios/{id}/upload-document` | Subir/reemplazar documento del predio |
+| GET | `/predios/{id}/document` | Obtener documento del predio (URL prefirmada) |
 
 ### Domicilios
 | Método | Endpoint | Descripción |
@@ -445,9 +449,13 @@ sequenceDiagram
 ### Documentos
 | Método | Endpoint | Descripción |
 |---|---|---|
-| GET | `/files/` | Listar documentos del usuario (con URLs prefirmadas) |
+| GET | `/files/` | Listar documentos del usuario (con URLs prefirmadas y última revisión) |
 | POST | `/files/upload` | Subir/reemplazar documento genérico |
 | DELETE | `/files/{id}` | Eliminar documento (S3 + BD) |
+| POST | `/files/{id}/review` | **Admin:** Aprobar o rechazar un documento |
+| GET | `/files/{id}/reviews` | **Admin:** Historial de revisiones de un documento |
+| GET | `/files/admin/pending` | **Admin:** Cola de documentos pendientes de revisión |
+| GET | `/files/admin/all` | **Admin:** Todos los documentos del sistema |
 
 ### Eventos
 | Método | Endpoint | Descripción |

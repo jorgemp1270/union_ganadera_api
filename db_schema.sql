@@ -11,6 +11,9 @@ CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'admin', 'ban');
 -- Enum for document types
 CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reverso', 'comprobante_domicilio', 'predio', 'cedula_veterinario', 'nariz', 'fierro', 'otro');
 
+-- Enum for document review status
+CREATE TYPE doc_review_status_enum AS ENUM ('pendiente', 'aprobado', 'rechazado');
+
 -- 2. BASE TABLES
 -- ---------------------------------------------------------
 
@@ -99,6 +102,17 @@ CREATE TABLE bovinos (
     imc DECIMAL(4, 2),
     proposito VARCHAR(50),
     status VARCHAR(20) DEFAULT 'activo'
+);
+
+-- 4b. DOCUMENT REVIEW
+-- ---------------------------------------------------------
+CREATE TABLE documento_revisiones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    documento_id UUID NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
+    admin_id UUID NOT NULL REFERENCES usuarios(id),
+    status doc_review_status_enum NOT NULL,
+    comentario TEXT,
+    fecha TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 5. EVENTS SYSTEM
@@ -197,6 +211,9 @@ CREATE TABLE remisiones (
 -- ---------------------------------------------------------
 CREATE INDEX idx_usuarios_rol ON usuarios(rol);
 
+CREATE INDEX idx_documento_revisiones_doc ON documento_revisiones(documento_id);
+CREATE INDEX idx_documento_revisiones_admin ON documento_revisiones(admin_id);
+
 CREATE INDEX idx_bovinos_usuario ON bovinos(usuario_id);
 CREATE INDEX idx_bovinos_predio ON bovinos(predio_id);
 CREATE INDEX idx_bovinos_madre ON bovinos(madre_id);
@@ -212,6 +229,26 @@ CREATE INDEX idx_enfermedades_evento ON enfermedades(evento_id);
 
 -- 9. TRIGGERS & FUNCTIONS (Automation)
 -- ---------------------------------------------------------
+
+-- C. Document Review Automation
+-- Automatically syncs documentos.authored when a revision is inserted
+CREATE OR REPLACE FUNCTION sync_documento_authored()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'aprobado' THEN
+        UPDATE documentos SET authored = TRUE WHERE id = NEW.documento_id;
+    ELSE
+        UPDATE documentos SET authored = FALSE WHERE id = NEW.documento_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_authored
+AFTER INSERT ON documento_revisiones
+FOR EACH ROW
+EXECUTE FUNCTION sync_documento_authored();
+
 
 -- A. Weight Automation
 -- Automatically updates the cow's current weight when a 'peso' event is added

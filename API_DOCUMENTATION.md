@@ -232,9 +232,26 @@ All endpoints require authentication.
   "nariz_storage_key": null,
   "nariz_url": null,
   "folio": "A3B7X2K",
-  "status": "activo"
+  "status": "activo",
+  "madre_id": "uuid-madre",
+  "padre_id": "uuid-padre",
+  "madre": {
+    "id": "uuid-madre",
+    "folio": "B1C2D3E",
+    "raza_dominante": "Holstein",
+    "fecha_nac": "2019-06-01",
+    "sexo": "F"
+  },
+  "padre": null
 }
 ```
+
+**Parent Lineage Fields (`madre` / `padre`):**
+- Always returns a minimal public projection: `id`, `folio`, `raza_dominante`, `fecha_nac`, `sexo`
+- Present only on `GET /bovinos/{bovino_id}` (single detail). List endpoints always return `null` for these fields.
+- If the parent bovino belongs to a different user (cross-ownership after a sale), the same minimal fields are returned — no full record is exposed.
+- If the parent UUID no longer resolves (deleted), the field is `null`.
+- Use the returned `id` + `GET /bovinos/{id}` to navigate to full parent detail (will return `403` if cross-ownership).
 
 **Error Response:** `404 Not Found`
 ```json
@@ -674,6 +691,11 @@ All events require authentication and ownership verification.
 
 **Required Role:** Any authenticated user
 
+**Ownership Rules:**
+- The `bovino_id` must belong to the authenticated user (standard owner-only enforcement)
+- `vendedor_curp` **must exactly match the authenticated user's CURP** — the API enforces that only the actual seller can initiate the sale. Sending a different CURP returns `403 Forbidden`.
+- `comprador_curp` must be a registered user in the system (the stored procedure resolves it to a UUID)
+
 **Request:**
 ```json
 {
@@ -689,10 +711,14 @@ All events require authentication and ownership verification.
 
 **Required Fields:**
 - `bovino_id`: UUID of the animal being sold
-- `comprador_curp`: CURP (18 characters) of the buyer
-- `vendedor_curp`: CURP (18 characters) of the seller
+- `comprador_curp`: CURP (18 characters) of the buyer — must exist in the system
+- `vendedor_curp`: CURP (18 characters) of the seller — **must match the authenticated user's CURP**
 
-**Important:** This automatically transfers ownership to the buyer (comprador_curp) and clears the `predio_id` (location).
+**Important:** This automatically transfers ownership to the buyer (`comprador_curp`) and clears the `predio_id` (location). After the event, the bovino is no longer visible to the seller via `GET /bovinos/`.
+
+**Error Responses (compraventa-specific):**
+- `403 Forbidden` — `vendedor_curp` does not match the authenticated user's CURP
+- `422 Unprocessable Entity` — `vendedor_curp` field is missing from `data`
 
 ---
 
@@ -838,15 +864,15 @@ In addition, a special sub-collection endpoint exists to retrieve all treatments
     "original_filename": "INE_JohnDoe_frente.jpg",
     "created_at": "2026-01-23T14:30:00Z",
     "authored": false,
-    "download_url": "http://localhost:4566/documentos/user-uuid/identificacion_frente/filename.jpg?X-Amz-Algorithm=..."
-  },
-  {
-    "id": "doc-uuid-2b",
-    "doc_type": "identificacion_reverso",
-    "original_filename": "INE_JohnDoe_reverso.jpg",
-    "created_at": "2026-01-23T14:31:00Z",
-    "authored": false,
-    "download_url": "http://localhost:4566/documentos/user-uuid/identificacion_reverso/filename.jpg?X-Amz-Algorithm=..."
+    "download_url": "http://localhost:4566/documentos/user-uuid/identificacion_frente/filename.jpg?X-Amz-Algorithm=...",
+    "ultima_revision": {
+      "id": "rev-uuid",
+      "documento_id": "doc-uuid-1",
+      "admin_id": "admin-uuid",
+      "status": "rechazado",
+      "comentario": "La imagen es ilegible. Por favor suba una foto más clara.",
+      "fecha": "2026-01-24T09:00:00Z"
+    }
   },
   {
     "id": "doc-uuid-2",
@@ -854,7 +880,15 @@ In addition, a special sub-collection endpoint exists to retrieve all treatments
     "original_filename": "Predio_Ejidal.pdf",
     "created_at": "2026-01-20T10:15:00Z",
     "authored": true,
-    "download_url": "http://localhost:4566/documentos/user-uuid/predio/filename2.pdf?X-Amz-Algorithm=..."
+    "download_url": "http://localhost:4566/documentos/user-uuid/predio/filename2.pdf?X-Amz-Algorithm=...",
+    "ultima_revision": {
+      "id": "rev-uuid-2",
+      "documento_id": "doc-uuid-2",
+      "admin_id": "admin-uuid",
+      "status": "aprobado",
+      "comentario": null,
+      "fecha": "2026-01-22T11:30:00Z"
+    }
   }
 ]
 ```
@@ -862,8 +896,8 @@ In addition, a special sub-collection endpoint exists to retrieve all treatments
 **Note:**
 - Returns all documents owned by the current user, ordered by date (newest first)
 - Each document includes a `download_url` - a presigned S3 URL valid for 1 hour
-- Use the `download_url` to download the file directly (no authentication needed for the URL itself)
-- `authored`: Boolean indicating if an admin has authorized/approved the document (default: false)
+- `authored`: `true` when the latest review was `aprobado`; `false` otherwise
+- `ultima_revision`: the most recent admin review for the document, or `null` if not yet reviewed
 
 ---
 
@@ -936,8 +970,10 @@ Files are stored in S3 with the following key patterns:
 
 **Document Authorization:**
 - Documents are created with `authored: false` by default
-- In future releases, admin users will be able to review and authorize documents
-- The `authored` field tracks whether an admin has verified/approved the document
+- Admins review documents via `POST /files/{doc_id}/review` with a status of `aprobado` or `rechazado`
+- A DB trigger automatically sets `authored = true` when a document is approved, and `false` when denied
+- Re-uploading a document (upsert) deletes the old record and its revision history — the new upload starts fresh as `pendiente`
+- Users can check `ultima_revision` in any document response to see the current status and any denial instructions
 
 **One Document Per Slot (Upsert Behavior):**
 Each upload endpoint enforces a single document per logical slot. If a document already exists for that slot, the old file is deleted from S3 and replaced in the database automatically:
@@ -974,6 +1010,130 @@ Each upload endpoint enforces a single document per logical slot. If a document 
 - `500 Internal Server Error` - S3 deletion failed
 
 **Note:** Deletes the file from both S3 storage and the database. This is permanent and cannot be undone. Note that re-uploading to the same endpoint automatically replaces the existing document, so manual deletion before re-upload is not necessary.
+
+---
+
+## Document Review (Admin Only)
+
+All endpoints in this section require the authenticated user to have `rol = "admin"`. A `403 Forbidden` is returned for any other role.
+
+### 1. List Pending Documents
+
+**Endpoint:** `GET /files/admin/pending?skip=0&limit=100`
+
+**Headers:** `Authorization: Bearer {admin_token}`
+
+**Description:** Returns all documents across all users where `authored = false` (not yet approved), ordered oldest first. Use this as the admin review queue.
+
+**Response:** `200 OK` — array of `DocumentoResponse` objects (same shape as user list, including `ultima_revision`)
+
+---
+
+### 2. List All Documents (Admin)
+
+**Endpoint:** `GET /files/admin/all?skip=0&limit=100`
+
+**Headers:** `Authorization: Bearer {admin_token}`
+
+**Description:** Returns every document in the system across all users, ordered newest first.
+
+**Response:** `200 OK` — array of `DocumentoResponse` objects
+
+---
+
+### 3. Review a Document
+
+**Endpoint:** `POST /files/{doc_id}/review`
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+- `Content-Type: application/json`
+
+**Path Parameters:**
+- `doc_id`: UUID of the document to review
+
+**Request Body:**
+```json
+{
+  "status": "rechazado",
+  "comentario": "La imagen es ilegible. Suba una foto con buena iluminación y sin reflejos."
+}
+```
+
+**Fields:**
+- `status` (required): `"aprobado"` or `"rechazado"`
+- `comentario` (optional): Free-text instructions for the user. Recommended when denying.
+
+**Response:** `200 OK`
+```json
+{
+  "id": "rev-uuid",
+  "documento_id": "doc-uuid",
+  "admin_id": "admin-uuid",
+  "status": "rechazado",
+  "comentario": "La imagen es ilegible. Suba una foto con buena iluminación y sin reflejos.",
+  "fecha": "2026-02-22T15:00:00Z"
+}
+```
+
+**Side effects:**
+- A DB trigger fires on insert and sets `documentos.authored = true` if `status = aprobado`, or `false` if `rechazado`
+- Multiple reviews can exist for the same document (full history). Only the latest affects `authored`
+
+**Error Responses:**
+- `403 Forbidden` - Not an admin
+- `404 Not Found` - Document not found
+
+**Flutter Example:**
+```dart
+final response = await http.post(
+  Uri.parse('$baseUrl/files/$docId/review'),
+  headers: {
+    'Authorization': 'Bearer $adminToken',
+    'Content-Type': 'application/json',
+  },
+  body: jsonEncode({
+    'status': 'rechazado',
+    'comentario': 'Suba una imagen más clara.',
+  }),
+);
+```
+
+---
+
+### 4. Get Review History
+
+**Endpoint:** `GET /files/{doc_id}/reviews`
+
+**Headers:** `Authorization: Bearer {admin_token}`
+
+**Description:** Returns the full audit trail of all admin reviews for a document, newest first.
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "rev-uuid-2",
+    "documento_id": "doc-uuid",
+    "admin_id": "admin-uuid",
+    "status": "aprobado",
+    "comentario": null,
+    "fecha": "2026-02-22T16:00:00Z"
+  },
+  {
+    "id": "rev-uuid-1",
+    "documento_id": "doc-uuid",
+    "admin_id": "admin-uuid",
+    "status": "rechazado",
+    "comentario": "La imagen es ilegible.",
+    "fecha": "2026-02-22T15:00:00Z"
+  }
+]
+```
+
+**Error Responses:**
+- `403 Forbidden` - Not an admin
+- `404 Not Found` - Document not found
 
 ---
 
@@ -1314,6 +1474,44 @@ var request = http.MultipartRequest(
 request.headers['Authorization'] = 'Bearer $token';
 request.files.add(await http.MultipartFile.fromPath('file', filePath));
 final response = await request.send();
+```
+
+---
+
+### 7. Get Predio Document
+
+**Endpoint:** `GET /predios/{predio_id}/document`
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Response:** `200 OK`
+```json
+{
+  "id": "doc-uuid",
+  "doc_type": "predio",
+  "original_filename": "titulo_propiedad.pdf",
+  "created_at": "2026-01-23T14:30:00Z",
+  "authored": false,
+  "download_url": "http://192.168.x.x:4566/documentos/user-uuid/predio/predio-uuid/uuid.pdf?X-Amz-Algorithm=..."
+}
+```
+
+The `download_url` is a presigned S3 URL valid for **1 hour**. The Flutter app can use it directly to download or display the file without further authentication.
+
+**Error Responses:**
+- `403 Forbidden` - Predio does not belong to the current user
+- `404 Not Found` - Predio not found, or no document has been uploaded yet
+
+**Flutter Example:**
+```dart
+final response = await http.get(
+  Uri.parse('$baseUrl/predios/$predioId/document'),
+  headers: {'Authorization': 'Bearer $token'},
+);
+if (response.statusCode == 200) {
+  final doc = jsonDecode(response.body);
+  final downloadUrl = doc['download_url']; // Use to open/download the file
+}
 ```
 
 ---

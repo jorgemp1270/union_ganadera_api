@@ -13,9 +13,11 @@ router = APIRouter(
 )
 
 def _with_nariz_url(bovino: models.Bovino) -> dict:
-    """Convert a Bovino ORM object to a dict with a presigned nariz_url if available."""
+    """Convert a Bovino ORM object to a dict with a presigned nariz_url. No parent resolution."""
     data = {c.name: getattr(bovino, c.name) for c in bovino.__table__.columns}
     data["nariz_url"] = None
+    data["madre"] = None
+    data["padre"] = None
     if bovino.nariz_storage_key:
         try:
             data["nariz_url"] = s3_public_client.generate_presigned_url(
@@ -25,6 +27,39 @@ def _with_nariz_url(bovino: models.Bovino) -> dict:
             )
         except Exception:
             pass
+    return data
+
+
+def _resolve_parent(db: Session, parent_id, current_user_id) -> dict | None:
+    """Resolve a madre_id/padre_id to a BovinoParentPublic projection.
+
+    Always returns only the public-safe minimal fields regardless of ownership.
+    If the parent belongs to a different user, only the safe fields are returned.
+    If owned by the requesting user, still returns the same minimal shape here —
+    the full detail is available via GET /bovinos/{parent_id}.
+    Returns None if parent_id is None or the parent no longer exists.
+    """
+    if parent_id is None:
+        return None
+    parent = crud.get_bovino(db, bovino_id=str(parent_id))
+    if parent is None:
+        return None
+    # Return minimal projection — includes an ownership flag so the client
+    # knows whether to offer a navigation link to the full record
+    return {
+        "id": parent.id,
+        "folio": parent.folio,
+        "raza_dominante": parent.raza_dominante,
+        "fecha_nac": parent.fecha_nac,
+        "sexo": parent.sexo,
+    }
+
+
+def _with_parents(bovino: models.Bovino, db: Session, current_user_id) -> dict:
+    """Full detail response: nariz_url + resolved madre/padre projections."""
+    data = _with_nariz_url(bovino)
+    data["madre"] = _resolve_parent(db, bovino.madre_id, current_user_id)
+    data["padre"] = _resolve_parent(db, bovino.padre_id, current_user_id)
     return data
 
 @router.get("/", response_model=List[schemas.BovinoResponse])
@@ -83,7 +118,7 @@ async def read_bovino(bovino_id: str,
         raise HTTPException(status_code=404, detail="Bovino not found")
     if db_bovino.usuario_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this bovino")
-    return _with_nariz_url(db_bovino)
+    return _with_parents(db_bovino, db, current_user.id)
 
 @router.post("/", response_model=schemas.BovinoResponse)
 async def create_bovino(bovino: schemas.BovinoCreate,

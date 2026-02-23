@@ -18,6 +18,11 @@ class DocTypeEnum(str, Enum):
     fierro = "fierro"
     otro = "otro"
 
+class DocReviewStatusEnum(str, Enum):
+    pendiente = "pendiente"
+    aprobado = "aprobado"
+    rechazado = "rechazado"
+
 # User Schemas
 class UserBase(BaseModel):
     curp: str
@@ -94,6 +99,17 @@ class BovinoUpdate(BaseModel):
     peso_actual: Optional[float] = None
     proposito: Optional[str] = None
 
+class BovinoParentPublic(BaseModel):
+    """Minimal public-safe projection for a parent bovino owned by a different user."""
+    id: UUID
+    folio: Optional[str] = None
+    raza_dominante: Optional[str] = None
+    fecha_nac: Optional[date] = None
+    sexo: Optional[SexoEnum] = None
+
+    class Config:
+        from_attributes = True
+
 class BovinoResponse(BovinoBase):
     id: UUID
     usuario_id: UUID
@@ -102,6 +118,10 @@ class BovinoResponse(BovinoBase):
     nariz_url: Optional[str] = None
     folio: Optional[str] = None
     status: str
+    # Resolved parent projections — None when not requested (list endpoints)
+    # Full BovinoResponse if owned by requesting user, BovinoParentPublic otherwise
+    madre: Optional[BovinoParentPublic] = None
+    padre: Optional[BovinoParentPublic] = None
 
     class Config:
         from_attributes = True
@@ -216,6 +236,21 @@ class TratamientoDetailResponse(EventoResponse):
     periodo: Optional[str] = None
 
 # Document Schemas
+class DocumentoRevisionCreate(BaseModel):
+    status: DocReviewStatusEnum
+    comentario: Optional[str] = None
+
+class DocumentoRevisionResponse(BaseModel):
+    id: UUID
+    documento_id: UUID
+    admin_id: UUID
+    status: DocReviewStatusEnum
+    comentario: Optional[str] = None
+    fecha: datetime
+
+    class Config:
+        from_attributes = True
+
 class DocumentoResponse(BaseModel):
     id: UUID
     doc_type: DocTypeEnum
@@ -223,6 +258,7 @@ class DocumentoResponse(BaseModel):
     created_at: datetime
     authored: bool
     download_url: Optional[str] = None
+    ultima_revision: Optional[DocumentoRevisionResponse] = None
 
     class Config:
         from_attributes = True

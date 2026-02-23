@@ -4,7 +4,7 @@ from typing import List
 import os
 import uuid as uuid_lib
 from .. import crud, models, schemas, auth, database
-from ..s3 import s3_client, S3_BUCKET_NAME
+from ..s3 import s3_client, s3_public_client, S3_BUCKET_NAME
 
 router = APIRouter(
     prefix="/predios",
@@ -111,3 +111,38 @@ async def upload_predio_document(
     }
 
     return crud.create_documento(db=db, documento_data=doc_data)
+
+@router.get("/{predio_id}/document", response_model=schemas.DocumentoResponse)
+async def get_predio_document(
+    predio_id: str,
+    current_user: models.Usuario = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    db_predio = crud.get_predio(db, predio_id=predio_id)
+    if db_predio is None:
+        raise HTTPException(status_code=404, detail="Predio not found")
+    if db_predio.usuario_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view documents for this predio")
+
+    prefix = f"{current_user.id}/predio/{predio_id}/"
+    existing = crud.get_documento_by_storage_prefix(db, prefix=prefix)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="No document found for this predio")
+
+    try:
+        download_url = s3_public_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': S3_BUCKET_NAME, 'Key': existing.storage_key},
+            ExpiresIn=3600
+        )
+    except Exception:
+        download_url = None
+
+    return {
+        "id": existing.id,
+        "doc_type": existing.doc_type,
+        "original_filename": existing.original_filename,
+        "created_at": existing.created_at,
+        "authored": existing.authored,
+        "download_url": download_url
+    }

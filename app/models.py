@@ -26,6 +26,11 @@ class DocTypeEnum(str, enum.Enum):
     fierro = "fierro"
     otro = "otro"
 
+class DocReviewStatusEnum(str, enum.Enum):
+    pendiente = "pendiente"
+    aprobado = "aprobado"
+    rechazado = "rechazado"
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -226,3 +231,22 @@ class Documento(Base):
     authored = Column(Boolean, default=False)
 
     usuario = relationship("Usuario", back_populates="documentos")
+    revisiones = relationship(
+        "DocumentoRevision",
+        back_populates="documento",
+        cascade="all, delete-orphan"
+    )
+
+
+class DocumentoRevision(Base):
+    __tablename__ = "documento_revisiones"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    documento_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id", ondelete="CASCADE"), nullable=False)
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    status = Column(Enum(DocReviewStatusEnum), nullable=False)
+    comentario = Column(Text, nullable=True)
+    fecha = Column(DateTime(timezone=True), server_default=func.now())
+
+    documento = relationship("Documento", back_populates="revisiones")
+    admin = relationship("Usuario", foreign_keys=[admin_id])
