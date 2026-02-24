@@ -14,6 +14,8 @@ router = APIRouter(
 async def get_enfermedades(skip: int = 0, limit: int = 100,
                            current_user: models.Usuario = Depends(auth.get_current_user),
                            db: Session = Depends(database.get_db)):
+    if current_user.rol == 'veterinario':
+        return crud.get_enfermedades_all(db, skip=skip, limit=limit)
     return crud.get_enfermedades_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
 
 @router.get("/bovino/{bovino_id}", response_model=List[schemas.EnfermedadDetailResponse])
@@ -23,7 +25,7 @@ async def get_enfermedades_by_bovino(bovino_id: str, skip: int = 0, limit: int =
     db_bovino = crud.get_bovino(db, bovino_id=bovino_id)
     if db_bovino is None:
         raise HTTPException(status_code=404, detail="Bovino not found")
-    if db_bovino.usuario_id != current_user.id:
+    if current_user.rol != 'veterinario' and db_bovino.usuario_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
     return crud.get_enfermedades_by_bovino(db, bovino_id=bovino_id, skip=skip, limit=limit)
 
@@ -42,9 +44,27 @@ async def get_tratamientos_by_enfermedad(enfermedad_id: str, skip: int = 0, limi
     if enfermedad is None:
         raise HTTPException(status_code=404, detail="Enfermedad not found")
     db_bovino = crud.get_bovino(db, bovino_id=str(enfermedad["bovino_id"]))
-    if db_bovino is None or db_bovino.usuario_id != current_user.id:
+    if db_bovino is None or (current_user.rol != 'veterinario' and db_bovino.usuario_id != current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
     return crud.get_tratamientos_by_enfermedad(db, enfermedad_id=enfermedad_id, skip=skip, limit=limit)
+
+@router.get("/{enfermedad_id}/remisiones", response_model=List[schemas.RemisionDetailResponse])
+async def get_remisiones_by_enfermedad(enfermedad_id: str, skip: int = 0, limit: int = 100,
+                                        current_user: models.Usuario = Depends(auth.get_current_user),
+                                        db: Session = Depends(database.get_db)):
+    evento_id = db.execute(
+        text("SELECT evento_id FROM enfermedades WHERE id = :eid"),
+        {"eid": enfermedad_id}
+    ).scalar()
+    if evento_id is None:
+        raise HTTPException(status_code=404, detail="Enfermedad not found")
+    enfermedad = crud.get_enfermedad_detail(db, evento_id=str(evento_id))
+    if enfermedad is None:
+        raise HTTPException(status_code=404, detail="Enfermedad not found")
+    db_bovino = crud.get_bovino(db, bovino_id=str(enfermedad["bovino_id"]))
+    if db_bovino is None or db_bovino.usuario_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return crud.get_remisiones_by_enfermedad(db, enfermedad_id=enfermedad_id, skip=skip, limit=limit)
 
 @router.get("/{evento_id}", response_model=schemas.EnfermedadDetailResponse)
 async def get_enfermedad(evento_id: str,
@@ -54,6 +74,6 @@ async def get_enfermedad(evento_id: str,
     if enfermedad is None:
         raise HTTPException(status_code=404, detail="Enfermedad event not found")
     db_bovino = crud.get_bovino(db, bovino_id=enfermedad["bovino_id"])
-    if db_bovino.usuario_id != current_user.id:
+    if current_user.rol != 'veterinario' and db_bovino.usuario_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
     return enfermedad

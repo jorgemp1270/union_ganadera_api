@@ -278,6 +278,23 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
             "periodo": data.get('periodo'), "obs": observaciones
         }).scalar()
 
+    elif etype == 'remision':
+        # Validate that the referenced enfermedad belongs to the same bovino
+        enfermedad_id_param = data.get('enfermedad_id')
+        if enfermedad_id_param:
+            enf_bovino = db.execute(
+                text("SELECT bovino_id FROM eventos WHERE id = (SELECT evento_id FROM enfermedades WHERE id = :eid)"),
+                {"eid": enfermedad_id_param}
+            ).scalar()
+            if enf_bovino and str(enf_bovino) != str(bovino_id):
+                raise HTTPException(status_code=400, detail="La enfermedad no pertenece al mismo bovino")
+        # registrar_remision(_bovino_id, _enfermedad_id, _usuario_id, _fecha, _observaciones)
+        q = text("SELECT registrar_remision(:bid, :eid, :uid, NOW(), :obs)")
+        eid = db.execute(q, {
+            "bid": bovino_id, "eid": enfermedad_id_param, "uid": data.get('usuario_id'),
+            "obs": observaciones
+        }).scalar()
+
     # fallback to generic if no match or 'general'
     else:
         db_evento = models.Evento(bovino_id=bovino_id, observaciones=observaciones)
@@ -288,7 +305,7 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
 
     # Commit if we used a raw SQL function (which returns a UUID scalar)
     supported_types = ['peso', 'dieta', 'vacunacion', 'desparasitacion', 'laboratorio',
-                      'compraventa', 'traslado', 'enfermedad', 'tratamiento']
+                      'compraventa', 'traslado', 'enfermedad', 'tratamiento', 'remision']
     if etype in supported_types:
          db.commit()
 
@@ -535,6 +552,15 @@ def get_vacunaciones_by_user(db: Session, user_id: str, skip: int = 0, limit: in
              "veterinario_id": v.veterinario_id, "tipo": v.tipo, "lote": v.lote,
              "laboratorio": v.laboratorio, "fecha_prox": v.fecha_prox} for e, v in results]
 
+def get_vacunaciones_all(db: Session, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Vacunacion).join(
+        models.Vacunacion, models.Evento.id == models.Vacunacion.evento_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "veterinario_id": v.veterinario_id, "tipo": v.tipo, "lote": v.lote,
+             "laboratorio": v.laboratorio, "fecha_prox": v.fecha_prox} for e, v in results]
+
 def get_vacunaciones_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit: int = 100):
     results = db.query(models.Evento, models.Vacunacion).join(
         models.Vacunacion, models.Evento.id == models.Vacunacion.evento_id
@@ -571,6 +597,15 @@ def get_desparasitaciones_by_user(db: Session, user_id: str, skip: int = 0, limi
              "veterinario_id": d.veterinario_id, "medicamento": d.medicamento,
              "dosis_admin": d.dosis_admin, "fecha_prox": d.fecha_prox} for e, d in results]
 
+def get_desparasitaciones_all(db: Session, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Desparasitacion).join(
+        models.Desparasitacion, models.Evento.id == models.Desparasitacion.evento_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "veterinario_id": d.veterinario_id, "medicamento": d.medicamento,
+             "dosis_admin": d.dosis_admin, "fecha_prox": d.fecha_prox} for e, d in results]
+
 def get_desparasitaciones_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit: int = 100):
     results = db.query(models.Evento, models.Desparasitacion).join(
         models.Desparasitacion, models.Evento.id == models.Desparasitacion.evento_id
@@ -601,6 +636,14 @@ def get_laboratorios_by_user(db: Session, user_id: str, skip: int = 0, limit: in
         models.Bovino, models.Evento.bovino_id == models.Bovino.id
     ).filter(
         models.Bovino.usuario_id == user_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "veterinario_id": l.veterinario_id, "tipo": l.tipo, "resultado": l.resultado} for e, l in results]
+
+def get_laboratorios_all(db: Session, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Laboratorio).join(
+        models.Laboratorio, models.Evento.id == models.Laboratorio.evento_id
     ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
 
     return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
@@ -705,6 +748,14 @@ def get_enfermedades_by_user(db: Session, user_id: str, skip: int = 0, limit: in
     return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
              "enfermedad_id": enf.id, "veterinario_id": enf.veterinario_id, "tipo": enf.tipo} for e, enf in results]
 
+def get_enfermedades_all(db: Session, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Enfermedad).join(
+        models.Enfermedad, models.Evento.id == models.Enfermedad.evento_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "enfermedad_id": enf.id, "veterinario_id": enf.veterinario_id, "tipo": enf.tipo} for e, enf in results]
+
 def get_enfermedades_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit: int = 100):
     results = db.query(models.Evento, models.Enfermedad).join(
         models.Enfermedad, models.Evento.id == models.Enfermedad.evento_id
@@ -733,6 +784,15 @@ def get_tratamientos_by_user(db: Session, user_id: str, skip: int = 0, limit: in
         models.Bovino, models.Evento.bovino_id == models.Bovino.id
     ).filter(
         models.Bovino.usuario_id == user_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "enfermedad_id": t.enfermedad_id, "veterinario_id": t.veterinario_id,
+             "medicamento": t.medicamento, "dosis": t.dosis, "periodo": t.periodo} for e, t in results]
+
+def get_tratamientos_all(db: Session, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Tratamiento).join(
+        models.Tratamiento, models.Evento.id == models.Tratamiento.evento_id
     ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
 
     return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
@@ -772,3 +832,54 @@ def get_tratamientos_by_enfermedad(db: Session, enfermedad_id: str, skip: int = 
     return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
              "enfermedad_id": t.enfermedad_id, "veterinario_id": t.veterinario_id,
              "medicamento": t.medicamento, "dosis": t.dosis, "periodo": t.periodo} for e, t in results]
+
+def get_remisiones_by_user(db: Session, user_id: str, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Remision).join(
+        models.Remision, models.Evento.id == models.Remision.evento_id
+    ).join(
+        models.Bovino, models.Evento.bovino_id == models.Bovino.id
+    ).filter(
+        models.Bovino.usuario_id == user_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "enfermedad_id": r.enfermedad_id, "veterinario_id": r.veterinario_id} for e, r in results]
+
+def get_remisiones_all(db: Session, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Remision).join(
+        models.Remision, models.Evento.id == models.Remision.evento_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "enfermedad_id": r.enfermedad_id, "veterinario_id": r.veterinario_id} for e, r in results]
+
+def get_remisiones_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Remision).join(
+        models.Remision, models.Evento.id == models.Remision.evento_id
+    ).filter(
+        models.Evento.bovino_id == bovino_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "enfermedad_id": r.enfermedad_id, "veterinario_id": r.veterinario_id} for e, r in results]
+
+def get_remision_detail(db: Session, evento_id: str):
+    result = db.query(models.Evento, models.Remision).join(
+        models.Remision, models.Evento.id == models.Remision.evento_id
+    ).filter(models.Evento.id == evento_id).first()
+
+    if not result:
+        return None
+    e, r = result
+    return {"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+            "enfermedad_id": r.enfermedad_id, "veterinario_id": r.veterinario_id}
+
+def get_remisiones_by_enfermedad(db: Session, enfermedad_id: str, skip: int = 0, limit: int = 100):
+    results = db.query(models.Evento, models.Remision).join(
+        models.Remision, models.Evento.id == models.Remision.evento_id
+    ).filter(
+        models.Remision.enfermedad_id == enfermedad_id
+    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
+             "enfermedad_id": r.enfermedad_id, "veterinario_id": r.veterinario_id} for e, r in results]

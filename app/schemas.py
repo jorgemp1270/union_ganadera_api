@@ -173,6 +173,10 @@ class EventoTratamientoCreate(EventoBase):
     dosis: str
     periodo: str
 
+class EventoRemisionCreate(EventoBase):
+    enfermedad_id: UUID
+    veterinario_id: UUID
+
 class EventoCreateGeneral(EventoBase):
     pass
 
@@ -234,6 +238,10 @@ class TratamientoDetailResponse(EventoResponse):
     medicamento: Optional[str] = None
     dosis: Optional[str] = None
     periodo: Optional[str] = None
+
+class RemisionDetailResponse(EventoResponse):
+    enfermedad_id: Optional[UUID] = None
+    veterinario_id: Optional[UUID] = None
 
 # Document Schemas
 class DocumentoRevisionCreate(BaseModel):

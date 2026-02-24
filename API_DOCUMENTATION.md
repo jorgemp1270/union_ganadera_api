@@ -89,7 +89,7 @@ For production, replace with your deployed backend URL.
 - The `cedula` (license number) is saved to the `veterinarios` table
 - The `cedula_file` (document) is stored in S3 and referenced in the `documentos` table with type `cedula_veterinario`
 - User is created with `rol='veterinario'`
-- Only veterinarians can create events that require veterinarian validation (vacunaciones, desparasitaciones, laboratorios, enfermedades, tratamientos)
+- Only veterinarians can create events that require veterinarian validation (vacunaciones, desparasitaciones, laboratorios, enfermedades, tratamientos, remisiones)
 
 **Flutter Implementation:**
 ```dart
@@ -787,6 +787,36 @@ All events require authentication and ownership verification.
 
 ---
 
+### 10. Remission (Remisión)
+
+**Required Role:** Veterinario only
+
+**Request:**
+```json
+{
+  "type": "remision",
+  "data": {
+    "bovino_id": "b7d3a8e9-1234-5678-9abc-def012345678",
+    "enfermedad_id": "disease-uuid",
+    "observaciones": "Bovino recuperado, alta médica"
+  }
+}
+```
+
+**Required:** Must link to an existing `enfermedad_id`. The `enfermedad_id` must belong to the same bovino as the remisión — the API validates this and returns `400` if they do not match.
+
+**Note:** The `veterinario_id` is resolved automatically on the backend from the authenticated user's veterinarian profile. No need to supply it in the request body.
+
+**Response fields:**
+- `id` — evento UUID
+- `bovino_id`
+- `fecha`
+- `observaciones`
+- `enfermedad_id` — UUID of the linked disease
+- `veterinario_id` — UUID of the veterinarian who registered the remission
+
+---
+
 ## Detailed Event Retrieval by Type
 
 Each event type has dedicated endpoints for retrieving detailed information with concatenated base event data and type-specific fields.
@@ -820,11 +850,11 @@ Each event type has dedicated endpoints for retrieving detailed information with
 - Base event fields: `id`, `bovino_id`, `fecha`, `observaciones`
 - Sale/purchase specific: `comprador_curp` (buyer's CURP), `vendedor_curp` (seller's CURP)
 
-**Note:** Similar GET endpoints exist for all other event types (pesos, dietas, vacunaciones, desparasitaciones, laboratorios, traslados, enfermedades, tratamientos) following the same pattern at `/eventos/{type}/`.
+**Note:** Similar GET endpoints exist for all other event types (pesos, dietas, vacunaciones, desparasitaciones, laboratorios, traslados, enfermedades, tratamientos, remisiones) following the same pattern at `/eventos/{type}/`.
 
-In addition, a special sub-collection endpoint exists to retrieve all treatments for a specific disease:
+In addition, special sub-collection endpoints exist to retrieve all treatments or remissions for a specific disease:
 
-**Endpoint:** `GET /eventos/enfermedades/{enfermedad_id}/tratamientos`
+#### `GET /eventos/enfermedades/{enfermedad_id}/tratamientos`
 
 **Headers:** `Authorization: Bearer {token}`
 
@@ -836,6 +866,59 @@ In addition, a special sub-collection endpoint exists to retrieve all treatments
 - `limit`: Number of records (default: 100)
 
 **Response:** `200 OK` — array of `TratamientoDetailResponse` (same schema as `GET /eventos/tratamientos/bovino/{bovino_id}`).
+
+**Errors:**
+- `404` — enfermedad not found
+- `403` — bovino belongs to another user
+
+---
+
+### Remisiones
+
+**Get all remisiones for user's cattle:**
+`GET /eventos/remisiones/?skip=0&limit=100`
+
+**Get remisiones for specific bovino:**
+`GET /eventos/remisiones/bovino/{bovino_id}?skip=0&limit=100`
+
+**Get remisiones for specific enfermedad:**
+`GET /eventos/remisiones/enfermedad/{enfermedad_id}?skip=0&limit=100`
+
+**Get single remisión event:**
+`GET /eventos/remisiones/{evento_id}`
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "evento-uuid",
+    "bovino_id": "b7d3a8e9-1234-5678-9abc-def012345678",
+    "fecha": "2026-02-10T09:00:00Z",
+    "observaciones": "Bovino recuperado, alta médica",
+    "enfermedad_id": "disease-uuid",
+    "veterinario_id": "vet-uuid"
+  }
+]
+```
+
+**Fields:**
+- Base event fields: `id`, `bovino_id`, `fecha`, `observaciones`
+- Remisión specific: `enfermedad_id` (linked disease), `veterinario_id` (vet who signed off)
+
+#### `GET /eventos/enfermedades/{enfermedad_id}/remisiones`
+
+Also available as a sub-collection on enfermedades:
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Path Parameters:**
+- `enfermedad_id`: UUID of the enfermedad record
+
+**Query Parameters:**
+- `skip`: Pagination offset (default: 0)
+- `limit`: Number of records (default: 100)
+
+**Response:** `200 OK` — array of `RemisionDetailResponse` (same schema as above).
 
 **Errors:**
 - `404` — enfermedad not found

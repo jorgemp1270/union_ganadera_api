@@ -219,6 +219,14 @@ class Tratamiento(Base):
     dosis = Column(String(50))
     periodo = Column(String(50))
 
+class Remision(Base):
+    __tablename__ = "remisiones"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"))
+    enfermedad_id = Column(UUID(as_uuid=True), ForeignKey("enfermedades.id"), nullable=True)
+    veterinario_id = Column(UUID(as_uuid=True))
+
 class Documento(Base):
     __tablename__ = "documentos"
 

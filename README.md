@@ -91,7 +91,8 @@ app/
         ├── compraventas.py
         ├── traslados.py
         ├── enfermedades.py
-        └── tratamientos.py
+        ├── tratamientos.py
+        └── remisiones.py
 ```
 
 ### Flujo de Autenticación
@@ -171,8 +172,8 @@ sequenceDiagram
 </p>
 
 - **Tablas principales:** usuarios, bovinos, documentos, domicilios, predios
-- **Tablas de eventos:** pesos, dietas, vacunaciones, desparasitaciones, laboratorios, compraventas, traslados, enfermedades, tratamientos
-- **Stored Procedures:** 9 procedimientos para registro de eventos
+- **Tablas de eventos:** pesos, dietas, vacunaciones, desparasitaciones, laboratorios, compraventas, traslados, enfermedades, tratamientos, remisiones
+- **Stored Procedures:** 10 procedimientos para registro de eventos
 - **Triggers:** Actualización automática de peso y transferencia de propiedad en compraventas
 - **Predios:** FK directa a `usuarios.id` (sin pasar por domicilio)
 
@@ -380,8 +381,9 @@ flowchart TD
 | `vacunacion` | Solo veterinario | Registro de vacuna con próxima fecha |
 | `desparasitacion` | Solo veterinario | Control de desparasitantes |
 | `laboratorio` | Solo veterinario | Resultados de análisis clínicos |
-| `enfermedad` | Solo veterinario | Diagnóstico de enfermedad. Cambia automáticamente el `status` del bovino a `"enfermo"`. Las respuestas GET incluyen `enfermedad_id` para enlazar tratamientos |
+| `enfermedad` | Solo veterinario | Diagnóstico de enfermedad. Cambia automáticamente el `status` del bovino a `"enfermo"`. Las respuestas GET incluyen `enfermedad_id` para enlazar tratamientos y remisiones |
 | `tratamiento` | Solo veterinario | Medicamento o procedimiento. Requiere `enfermedad_id` válido del mismo bovino |
+| `remision` | Solo veterinario | Alta médica del bovino. Requiere `enfermedad_id` válido del mismo bovino |
 
 Los veterinarios pueden registrar eventos para **cualquier** bovino del sistema; los usuarios regulares solo para los propios.
 
@@ -470,7 +472,11 @@ sequenceDiagram
 | GET | `/eventos/traslados/` | Listar traslados |
 | GET | `/eventos/enfermedades/` | Listar enfermedades |
 | GET | `/eventos/enfermedades/{enfermedad_id}/tratamientos` | Tratamientos de una enfermedad específica |
+| GET | `/eventos/enfermedades/{enfermedad_id}/remisiones` | Remisiones de una enfermedad específica |
 | GET | `/eventos/tratamientos/` | Listar tratamientos |
+| GET | `/eventos/remisiones/` | Listar remisiones |
+| GET | `/eventos/remisiones/bovino/{bovino_id}` | Remisiones de un bovino específico |
+| GET | `/eventos/remisiones/enfermedad/{enfermedad_id}` | Remisiones de una enfermedad específica |
 | GET | `/eventos/{tipo}/bovino/{bovino_id}` | Eventos de un tipo para un bovino específico |
 
 ---

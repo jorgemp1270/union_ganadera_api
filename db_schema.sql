@@ -207,6 +207,36 @@ CREATE TABLE remisiones (
     veterinario_id UUID REFERENCES veterinarios(id)
 );
 
+-- C. Register Remission (Disease resolved, linked to a specific Disease case)
+CREATE OR REPLACE FUNCTION registrar_remision(
+    _bovino_id UUID,
+    _enfermedad_id UUID, -- Must link to an existing disease case
+    _usuario_id UUID,
+    _fecha TIMESTAMPTZ DEFAULT NOW(),
+    _observaciones TEXT DEFAULT ''
+) RETURNS UUID AS $$
+DECLARE
+    _evento_id UUID;
+    _vet_id UUID;
+BEGIN
+    SELECT id INTO _vet_id FROM veterinarios WHERE usuario_id = _usuario_id;
+    IF _vet_id IS NULL THEN
+        RAISE EXCEPTION 'No veterinarian profile found for usuario_id %', _usuario_id;
+    END IF;
+
+    INSERT INTO eventos (bovino_id, fecha, observaciones)
+    VALUES (_bovino_id, _fecha, _observaciones)
+    RETURNING id INTO _evento_id;
+
+    INSERT INTO remisiones (evento_id, enfermedad_id, veterinario_id)
+    VALUES (_evento_id, _enfermedad_id, _vet_id);
+
+    UPDATE bovinos SET status = 'activo' WHERE id = _bovino_id;
+
+    RETURN _evento_id;
+END;
+$$ LANGUAGE plpgsql;
+
 -- 8. INDEXES
 -- ---------------------------------------------------------
 CREATE INDEX idx_usuarios_rol ON usuarios(rol);

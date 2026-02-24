@@ -20,7 +20,7 @@ async def create_evento(evento: schemas.EventoCreateRequest,
         raise HTTPException(status_code=404, detail="Bovino not found")
 
     # Define which events require veterinarian credentials
-    veterinary_events = ['vacunacion', 'desparasitacion', 'laboratorio', 'enfermedad', 'tratamiento']
+    veterinary_events = ['vacunacion', 'desparasitacion', 'laboratorio', 'enfermedad', 'tratamiento', 'remision']
 
     if evento.type in veterinary_events:
         # Veterinary events: ONLY veterinarians can create, for ANY bovino

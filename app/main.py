@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from .routers import users, bovinos, files, domicilios, predios
 from .routers import eventos_main
-from .routers.eventos import pesos, dietas, vacunaciones, desparasitaciones, laboratorios, compraventas, traslados, enfermedades, tratamientos
+from .routers.eventos import pesos, dietas, vacunaciones, desparasitaciones, laboratorios, compraventas, traslados, enfermedades, tratamientos, remisiones
 from .database import engine
 from . import models
 
@@ -22,6 +22,7 @@ app.include_router(compraventas.router)
 app.include_router(traslados.router)
 app.include_router(enfermedades.router)
 app.include_router(tratamientos.router)
+app.include_router(remisiones.router)
 app.include_router(files.router)
 app.include_router(domicilios.router)
 app.include_router(predios.router)
