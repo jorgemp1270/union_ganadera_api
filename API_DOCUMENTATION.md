@@ -740,6 +740,11 @@ All events require authentication and ownership verification.
 
 **Important:** Automatically updates the bovino's `predio_id`.
 
+**Privacy — acquisition date filtering:** A user only receives traslado events that occurred **on or after the date they acquired the bovino** (i.e. the date of the compraventa that transferred ownership to them). Traslados registered while the bovino belonged to a previous owner are silently excluded. This prevents a new owner from seeing the previous owner's `predio_anterior_id` / `predio_nuevo_id` UUIDs.
+
+- Original owners (bovino was never sold) see the full history.
+- The full history is permanently preserved in the database for regulatory purposes (e.g. SENASICA traceability); it is simply not surfaced to the new owner via the API.
+
 ---
 
 ### 8. Disease Detection (Enfermedad)

@@ -703,29 +703,66 @@ def get_compraventa_detail(db: Session, evento_id: str):
     return {"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
             "comprador_curp": c.comprador_curp, "vendedor_curp": c.vendedor_curp}
 
+def _get_acquisition_date(db: Session, bovino_id: str, user_id: str):
+    """Return the fecha of the most recent compraventa where this user became owner of the bovino.
+    Returns None if the user is the original owner (no acquisition compraventa on record)."""
+    return db.execute(
+        text("""
+            SELECT e.fecha FROM eventos e
+            JOIN compraventas c ON c.evento_id = e.id
+            JOIN usuarios u ON u.curp = c.comprador_curp
+            WHERE e.bovino_id = :bovino_id AND u.id = :user_id
+            ORDER BY e.fecha DESC
+            LIMIT 1
+        """),
+        {"bovino_id": bovino_id, "user_id": user_id}
+    ).scalar()
+
 def get_traslados_by_user(db: Session, user_id: str, skip: int = 0, limit: int = 100):
-    results = db.query(models.Evento, models.Traslado).join(
+    # Only return traslados that occurred after this user acquired each bovino.
+    # The correlated subquery resolves the acquisition date per bovino; COALESCE
+    # to '-infinity' covers original owners who never bought via compraventa.
+    rows = db.execute(
+        text("""
+            SELECT e.id, e.bovino_id, e.fecha, e.observaciones,
+                   t.predio_anterior_id, t.predio_nuevo_id
+            FROM eventos e
+            JOIN traslado t ON t.evento_id = e.id
+            JOIN bovinos b ON e.bovino_id = b.id
+            WHERE b.usuario_id = :user_id
+              AND e.fecha >= COALESCE(
+                  (SELECT e2.fecha FROM eventos e2
+                   JOIN compraventas c2 ON c2.evento_id = e2.id
+                   JOIN usuarios u2 ON u2.curp = c2.comprador_curp
+                   WHERE e2.bovino_id = e.bovino_id AND u2.id = :user_id
+                   ORDER BY e2.fecha DESC LIMIT 1),
+                  '-infinity'::timestamptz
+              )
+            ORDER BY e.fecha DESC
+            LIMIT :limit OFFSET :skip
+        """),
+        {"user_id": user_id, "limit": limit, "skip": skip}
+    ).fetchall()
+
+    return [{"id": r.id, "bovino_id": r.bovino_id, "fecha": r.fecha, "observaciones": r.observaciones,
+             "predio_anterior_id": r.predio_anterior_id, "predio_nuevo_id": r.predio_nuevo_id} for r in rows]
+
+def get_traslados_by_bovino(db: Session, bovino_id: str, user_id: str, skip: int = 0, limit: int = 100):
+    acquisition_date = _get_acquisition_date(db, bovino_id, user_id)
+
+    query = db.query(models.Evento, models.Traslado).join(
         models.Traslado, models.Evento.id == models.Traslado.evento_id
-    ).join(
-        models.Bovino, models.Evento.bovino_id == models.Bovino.id
-    ).filter(
-        models.Bovino.usuario_id == user_id
-    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+    ).filter(models.Evento.bovino_id == bovino_id)
+
+    if acquisition_date:
+        query = query.filter(models.Evento.fecha >= acquisition_date)
+
+    results = query.order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
 
     return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
              "predio_anterior_id": t.predio_anterior_id, "predio_nuevo_id": t.predio_nuevo_id} for e, t in results]
 
-def get_traslados_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit: int = 100):
-    results = db.query(models.Evento, models.Traslado).join(
-        models.Traslado, models.Evento.id == models.Traslado.evento_id
-    ).filter(
-        models.Evento.bovino_id == bovino_id
-    ).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
-
-    return [{"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
-             "predio_anterior_id": t.predio_anterior_id, "predio_nuevo_id": t.predio_nuevo_id} for e, t in results]
-
-def get_traslado_detail(db: Session, evento_id: str):
+def get_traslado_detail(db: Session, evento_id: str, user_id: str):
     result = db.query(models.Evento, models.Traslado).join(
         models.Traslado, models.Evento.id == models.Traslado.evento_id
     ).filter(models.Evento.id == evento_id).first()
@@ -733,6 +770,12 @@ def get_traslado_detail(db: Session, evento_id: str):
     if not result:
         return None
     e, t = result
+
+    # Check the event is not before this user's acquisition of the bovino
+    acquisition_date = _get_acquisition_date(db, str(e.bovino_id), user_id)
+    if acquisition_date and e.fecha < acquisition_date:
+        return None
+
     return {"id": e.id, "bovino_id": e.bovino_id, "fecha": e.fecha, "observaciones": e.observaciones,
             "predio_anterior_id": t.predio_anterior_id, "predio_nuevo_id": t.predio_nuevo_id}
 

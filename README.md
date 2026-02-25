@@ -377,7 +377,7 @@ flowchart TD
 | `peso` | Cualquier usuario (solo bovinos propios) | Registra un pesaje; actualiza `peso_actual` automáticamente |
 | `dieta` | Cualquier usuario (solo bovinos propios) | Cambio de alimentación |
 | `compraventa` | Cualquier usuario (solo bovinos propios) | Transfiere propiedad por CURP del comprador |
-| `traslado` | Cualquier usuario (solo bovinos propios) | Cambio de predio/ubicación |
+| `traslado` | Cualquier usuario (solo bovinos propios) | Cambio de predio/ubicación. Los traslados anteriores a la fecha de adquisición del propietario actual no son visibles para él |
 | `vacunacion` | Solo veterinario | Registro de vacuna con próxima fecha |
 | `desparasitacion` | Solo veterinario | Control de desparasitantes |
 | `laboratorio` | Solo veterinario | Resultados de análisis clínicos |

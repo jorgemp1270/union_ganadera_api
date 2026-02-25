@@ -177,7 +177,7 @@ CREATE TABLE compraventas (
 CREATE TABLE traslado (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     evento_id UUID NOT NULL REFERENCES eventos(id) ON DELETE CASCADE,
-    predio_anterior_id UUID REFERENCES predios(id),
+    predio_anterior_id UUID REFERENCES predios(id), -- NULL when bovino had no predio assigned at time of transfer
     predio_nuevo_id UUID REFERENCES predios(id)
 );
 

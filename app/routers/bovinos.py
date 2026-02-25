@@ -142,12 +142,7 @@ async def update_bovino(bovino_id: str, bovino: schemas.BovinoUpdate,
         raise HTTPException(status_code=404, detail="Bovino not found")
     if db_bovino.usuario_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this bovino")
-    if bovino.predio_id:
-        db_predio = crud.get_predio(db, predio_id=str(bovino.predio_id))
-        if db_predio is None:
-            raise HTTPException(status_code=404, detail="Predio not found")
-        if db_predio.usuario_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to assign this predio")
+    # predio_id updates are not accepted here — use a traslado event instead
     db_bovino = crud.update_bovino(db=db, bovino_id=bovino_id, bovino=bovino)
     return _with_nariz_url(db_bovino)
 
