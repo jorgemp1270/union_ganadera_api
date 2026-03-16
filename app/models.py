@@ -33,6 +33,15 @@ class DocReviewStatusEnum(str, enum.Enum):
     aprobado = "aprobado"
     rechazado = "rechazado"
 
+class FacilityTypeEnum(str, enum.Enum):
+    UPP = "UPP"
+    PSG = "PSG"
+    SUBASTA = "SUBASTA"
+    RASTRO = "RASTRO"
+    FERIA = "FERIA"
+    EXPORT_CENTER = "EXPORT_CENTER"
+    QUARANTINE_CENTER = "QUARANTINE_CENTER"
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -47,6 +56,7 @@ class Usuario(Base):
     documentos = relationship("Documento", back_populates="usuario")
     domicilios = relationship("Domicilio", back_populates="usuario")
     predios = relationship("Predio", back_populates="usuario")
+    instalaciones = relationship("Instalacion", back_populates="usuario")
 
 class Domicilio(Base):
     __tablename__ = "domicilios"
@@ -152,6 +162,7 @@ class Predio(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    facility_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id"), nullable=True)
     clave_catastral = Column(String(50), unique=True)
     superficie_total = Column(Numeric(10, 2))
     latitud = Column(Numeric(9, 6))
@@ -159,6 +170,7 @@ class Predio(Base):
 
     usuario = relationship("Usuario", back_populates="predios")
     bovinos = relationship("Bovino", back_populates="predio")
+    instalacion = relationship("Instalacion", back_populates="predios")
 
 class Evento(Base):
     __tablename__ = "eventos"
@@ -290,3 +302,62 @@ class DocumentoRevision(Base):
 
     documento = relationship("Documento", back_populates="revisiones")
     admin = relationship("Usuario", foreign_keys=[admin_id])
+
+
+class Instalacion(Base):
+    __tablename__ = "instalaciones"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    nombre = Column(String(150), nullable=False)
+    facility_type = Column(Enum(FacilityTypeEnum), nullable=False)
+    status = Column(String(20), default="activa")
+    latitud = Column(Numeric(9, 6))
+    longitud = Column(Numeric(9, 6))
+    estado = Column(String(50), nullable=False)
+    municipio = Column(String(50), nullable=False)
+    created_by_admin = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    license_number = Column(String(50), unique=True, nullable=False)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    usuario = relationship("Usuario", back_populates="instalaciones", foreign_keys=[usuario_id])
+    predios = relationship("Predio", back_populates="instalacion")
+    documentos = relationship("InstalacionDocumento", back_populates="instalacion", cascade="all, delete-orphan")
+    renovaciones = relationship("RenovacionUPP", back_populates="instalacion", cascade="all, delete-orphan")
+
+
+class InstalacionDocumento(Base):
+    __tablename__ = "instalacion_documentos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    instalacion_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id", ondelete="CASCADE"), nullable=False)
+    documento_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id", ondelete="CASCADE"), nullable=False)
+    documento_tipo = Column(String(50), nullable=False)
+    status = Column(Enum(DocReviewStatusEnum), default=DocReviewStatusEnum.pendiente)
+    comentario_rechazo = Column(Text, nullable=True)
+    review_date = Column(DateTime(timezone=True), nullable=True)
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    instalacion = relationship("Instalacion", back_populates="documentos")
+    documento = relationship("Documento")
+    reviewer = relationship("Usuario", foreign_keys=[reviewed_by])
+
+
+class RenovacionUPP(Base):
+    __tablename__ = "renovaciones_upp"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    instalacion_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id", ondelete="CASCADE"), nullable=False)
+    solicitada_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    estado = Column(String(20), default="pendiente")
+    fecha_solicitud = Column(DateTime(timezone=True), server_default=func.now())
+    fecha_proximo_vencimiento = Column(Date, nullable=True)
+    aprobada_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    fecha_aprobacion = Column(DateTime(timezone=True), nullable=True)
+    comentarios = Column(Text, nullable=True)
+
+    instalacion = relationship("Instalacion", back_populates="renovaciones")
+    solicitante = relationship("Usuario", foreign_keys=[solicitada_por])
+    aprobador = relationship("Usuario", foreign_keys=[aprobada_por])

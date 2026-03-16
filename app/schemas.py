@@ -384,3 +384,87 @@ class UserListResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# FacilityTypeEnum for installation types
+class FacilityTypeEnum(str, Enum):
+    UPP = "UPP"
+    PSG = "PSG"
+    SUBASTA = "SUBASTA"
+    RASTRO = "RASTRO"
+    FERIA = "FERIA"
+    EXPORT_CENTER = "EXPORT_CENTER"
+    QUARANTINE_CENTER = "QUARANTINE_CENTER"
+
+# Instalacion Schemas
+class InstalacionCreate(BaseModel):
+    usuario_id: Optional[UUID] = None
+    nombre: str
+    facility_type: str
+    status: Optional[str] = "activa"
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
+    estado: str
+    municipio: str
+    license_number: str
+    active: Optional[bool] = True
+
+class InstalacionUpdate(BaseModel):
+    nombre: Optional[str] = None
+    status: Optional[str] = None
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
+    estado: Optional[str] = None
+    municipio: Optional[str] = None
+    active: Optional[bool] = None
+
+class InstalacionResponse(BaseModel):
+    id: UUID
+    usuario_id: UUID
+    nombre: str
+    facility_type: str
+    status: str
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
+    estado: str
+    municipio: str
+    license_number: str
+    active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class InstalacionDocumentoResponse(BaseModel):
+    id: UUID
+    instalacion_id: UUID
+    documento_id: UUID
+    documento_tipo: str
+    status: str
+    comentario_rechazo: Optional[str] = None
+    review_date: Optional[datetime] = None
+    reviewed_by: Optional[UUID] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class InstalacionDetailResponse(InstalacionResponse):
+    documentos: list[InstalacionDocumentoResponse] = []
+    predios: list[PredioResponse] = []
+
+class RenovacionUPPCreate(BaseModel):
+    comentarios: Optional[str] = None
+
+class RenovacionUPPResponse(BaseModel):
+    id: UUID
+    instalacion_id: UUID
+    solicitada_por: UUID
+    estado: str
+    fecha_solicitud: datetime
+    fecha_proximo_vencimiento: Optional[date] = None
+    aprobada_por: Optional[UUID] = None
+    fecha_aprobacion: Optional[datetime] = None
+    comentarios: Optional[str] = None
+
+    class Config:
+        from_attributes = True

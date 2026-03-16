@@ -1,7 +1,7 @@
 # Union Ganadera API - Complete Endpoint Catalog
 
 **API Base URL**: `http://localhost:8000/api`  
-**Total Endpoints**: 76 (across 16 routers)
+**Total Endpoints**: 89 (across 17 routers)
 
 ---
 
@@ -10,9 +10,10 @@
 2. [Users](#users)
 3. [Bovinos (Cattle)](#bovinos-cattle)
 4. [Predios (Farms)](#predios-farms)
-5. [Domicilios (Addresses)](#domicilios-addresses)
-6. [Files/Documents](#filesdocuments)
-7. [Eventos (Events)](#eventos-events)
+5. [Instalaciones (Facilities)](#instalaciones-facilities)
+6. [Domicilios (Addresses)](#domicilios-addresses)
+7. [Files/Documents](#filesdocuments)
+8. [Eventos (Events)](#eventos-events)
    - [Pesos](#eventos---pesos)
    - [Dietas](#eventos---dietas)
    - [Vacunaciones](#eventos---vacunaciones)
@@ -529,6 +530,315 @@
 - `file`: file
 
 **Response** (201): `DocumentoResponse`
+
+---
+
+## Instalaciones (Facilities)
+
+**Facility Types**:
+- `UPP`: Unidad de Producción Pecuaria (Cattle Production Unit)
+- `PSG`: Productor de Servicios Ganaderos (Livestock Service Provider)
+- `SUBASTA`: Livestock Auction
+- `RASTRO`: Slaughterhouse
+- `FERIA`: Livestock Fair
+- `EXPORT_CENTER`: Export Center
+- `QUARANTINE_CENTER`: Quarantine Center
+
+### POST `/instalaciones/`
+**Description**: Create a new facility/installation  
+**Auth Required**: Yes  
+**Request Body**:
+```json
+{
+  "usuario_id": "uuid | null (defaults to current user)",
+  "nombre": "string",
+  "facility_type": "UPP | PSG | SUBASTA | RASTRO | FERIA | EXPORT_CENTER | QUARANTINE_CENTER",
+  "status": "activa (default)",
+  "latitud": "float | null",
+  "longitud": "float | null",
+  "estado": "string (state name)",
+  "municipio": "string (municipality name)",
+  "license_number": "string (unique)",
+  "active": "boolean (default: true)"
+}
+```
+**Response** (201): `InstalacionResponse`
+```json
+{
+  "id": "uuid",
+  "usuario_id": "uuid",
+  "nombre": "string",
+  "facility_type": "string",
+  "status": "string",
+  "latitud": "float | null",
+  "longitud": "float | null",
+  "estado": "string",
+  "municipio": "string",
+  "license_number": "string",
+  "active": "boolean",
+  "created_at": "ISO-8601 datetime"
+}
+```
+
+### GET `/instalaciones/`
+**Description**: List all facilities (admins see all, users see only theirs)  
+**Auth Required**: Yes  
+**Query Parameters**:
+- `facility_type`: string (optional, filter by type)
+- `estado`: string (optional, filter by state)
+- `active_only`: boolean (optional, default: false)
+
+**Response** (200): List of `InstalacionResponse`
+
+---
+
+### GET `/instalaciones/{instalacion_id}`
+**Description**: Get specific facility with documents and related info  
+**Auth Required**: Yes  
+**Path Parameters**:
+- `instalacion_id`: UUID
+
+**Response** (200): `InstalacionDetailResponse`
+```json
+{
+  "id": "uuid",
+  "usuario_id": "uuid",
+  "nombre": "string",
+  "facility_type": "string",
+  "status": "string",
+  "latitud": "float | null",
+  "longitud": "float | null",
+  "estado": "string",
+  "municipio": "string",
+  "license_number": "string",
+  "active": "boolean",
+  "created_at": "ISO-8601 datetime",
+  "documentos": [
+    {
+      "id": "uuid",
+      "instalacion_id": "uuid",
+      "documento_id": "uuid",
+      "documento_tipo": "string",
+      "status": "pendiente | aprobado | rechazado",
+      "comentario_rechazo": "string | null",
+      "review_date": "ISO-8601 datetime | null",
+      "reviewed_by": "uuid | null",
+      "created_at": "ISO-8601 datetime"
+    }
+  ],
+  "predios": [
+    {
+      "id": "uuid",
+      "usuario_id": "uuid",
+      "facility_id": "uuid",
+      "clave_catastral": "string",
+      "superficie_total": "decimal",
+      "latitud": "decimal",
+      "longitud": "decimal"
+    }
+  ]
+}
+```
+
+---
+
+### PUT `/instalaciones/{instalacion_id}`
+**Description**: Update facility information  
+**Auth Required**: Yes (owner or admin)  
+**Path Parameters**:
+- `instalacion_id`: UUID
+
+**Request Body** (all optional):
+```json
+{
+  "nombre": "string | null",
+  "status": "string | null",
+  "latitud": "float | null",
+  "longitud": "float | null",
+  "estado": "string | null",
+  "municipio": "string | null",
+  "active": "boolean | null"
+}
+```
+**Response** (200): `InstalacionResponse`
+
+---
+
+### DELETE `/instalaciones/{instalacion_id}`
+**Description**: Deactivate a facility (admins only)  
+**Auth Required**: Yes (admin only)  
+**Path Parameters**:
+- `instalacion_id`: UUID
+
+**Response** (204): No Content
+
+---
+
+### POST `/instalaciones/{instalacion_id}/documentos/{documento_tipo}`
+**Description**: Link a document to a facility  
+**Auth Required**: Yes  
+**Path Parameters**:
+- `instalacion_id`: UUID
+- `documento_tipo`: string (e.g., 'constancia_fiscal', 'certificado_parcelario', etc.)
+
+**Query Parameters**:
+- `documento_id`: UUID
+
+**Response** (201):
+```json
+{
+  "id": "uuid",
+  "instalacion_id": "uuid",
+  "documento_id": "uuid",
+  "documento_tipo": "string",
+  "status": "pendiente",
+  "created_at": "ISO-8601 datetime"
+}
+```
+
+---
+
+### GET `/instalaciones/{instalacion_id}/documentos`
+**Description**: Get all documents linked to a facility  
+**Auth Required**: Yes  
+**Path Parameters**:
+- `instalacion_id`: UUID
+
+**Response** (200): List of `InstalacionDocumentoResponse`
+
+---
+
+### POST `/instalaciones/{instalacion_id}/documentos/{doc_id}/aprobar`
+**Description**: Approve a facility document (admins only)  
+**Auth Required**: Yes (admin only)  
+**Path Parameters**:
+- `instalacion_id`: UUID
+- `doc_id`: UUID
+
+**Response** (200):
+```json
+{
+  "status": "approved",
+  "documento": {
+    "id": "uuid",
+    "instalacion_id": "uuid",
+    "documento_id": "uuid",
+    "documento_tipo": "string",
+    "status": "aprobado",
+    "review_date": "ISO-8601 datetime",
+    "reviewed_by": "uuid"
+  }
+}
+```
+
+---
+
+### POST `/instalaciones/{instalacion_id}/documentos/{doc_id}/rechazar`
+**Description**: Reject a facility document (admins only)  
+**Auth Required**: Yes (admin only)  
+**Path Parameters**:
+- `instalacion_id`: UUID
+- `doc_id`: UUID
+
+**Query Parameters**:
+- `comentario`: string (reason for rejection)
+
+**Response** (200):
+```json
+{
+  "status": "rejected",
+  "documento": {
+    "id": "uuid",
+    "instalacion_id": "uuid",
+    "documento_id": "uuid",
+    "documento_tipo": "string",
+    "status": "rechazado",
+    "comentario_rechazo": "string",
+    "review_date": "ISO-8601 datetime",
+    "reviewed_by": "uuid"
+  }
+}
+```
+
+---
+
+### POST `/instalaciones/{instalacion_id}/renovaciones/solicitar`
+**Description**: Request annual UPP renewal  
+**Auth Required**: Yes  
+**Path Parameters**:
+- `instalacion_id`: UUID
+
+**Response** (201): `RenovacionUPPResponse`
+```json
+{
+  "id": "uuid",
+  "instalacion_id": "uuid",
+  "solicitada_por": "uuid",
+  "estado": "pendiente",
+  "fecha_solicitud": "ISO-8601 datetime",
+  "fecha_proximo_vencimiento": "YYYY-MM-DD | null",
+  "aprobada_por": "uuid | null",
+  "fecha_aprobacion": "ISO-8601 datetime | null",
+  "comentarios": "string | null"
+}
+```
+
+---
+
+### GET `/instalaciones/renovaciones/pendientes`
+**Description**: Get all pending UPP renewals (admins/inspectors only)  
+**Auth Required**: Yes (admin/inspector only)  
+
+**Response** (200): List of `RenovacionUPPResponse`
+
+---
+
+### POST `/instalaciones/renovaciones/{renovacion_id}/aprobar`
+**Description**: Approve UPP renewal (extends license 365 days)  
+**Auth Required**: Yes (admin/inspector only)  
+**Path Parameters**:
+- `renovacion_id`: UUID
+
+**Response** (200): `RenovacionUPPResponse` with "aprobada" status and new expiration date
+
+---
+
+### POST `/instalaciones/renovaciones/{renovacion_id}/rechazar`
+**Description**: Reject UPP renewal  
+**Auth Required**: Yes (admin/inspector only)  
+**Path Parameters**:
+- `renovacion_id`: UUID
+
+**Query Parameters**:
+- `comentarios`: string (reason for rejection)
+
+**Response** (200): `RenovacionUPPResponse` with "rechazada" status
+
+---
+
+### GET `/instalaciones/buscar/municipio/{municipio}`
+**Description**: Search facilities by municipality  
+**Auth Required**: No  
+**Path Parameters**:
+- `municipio`: string
+
+**Query Parameters**:
+- `facility_type`: string (optional)
+
+**Response** (200): List of `InstalacionResponse`
+
+---
+
+### GET `/instalaciones/tipo/{facility_type}`
+**Description**: Search facilities by type  
+**Auth Required**: No  
+**Path Parameters**:
+- `facility_type`: UPP | PSG | SUBASTA | RASTRO | FERIA | EXPORT_CENTER | QUARANTINE_CENTER
+
+**Query Parameters**:
+- `estado`: string (optional, filter by state)
+
+**Response** (200): List of `InstalacionResponse`
 
 ---
 
@@ -1515,11 +1825,12 @@
 
 ## Summary Statistics
 
-- **Total Endpoints**: 73
+- **Total Endpoints**: 89
 - **Authentication Endpoints**: 5 (`/signup`, `/signup/veterinario`, `/signup/administrador`, `/signup/inspector`, `/login`)
 - **User Endpoints**: 3 (`/users/me`, `/administradores`, `/inspectores`)
 - **Bovino Endpoints**: 8 (CRUD + search + photo upload)
 - **Predio Endpoints**: 7 (CRUD + bovinos list + document upload)
+- **Instalaciones Endpoints**: 16 (CRUD + document management + UPP renewals + search by type/municipality)
 - **Domicilio Endpoints**: 7 (CRUD + document upload)
 - **File Endpoints**: 11 (list, upload, list pending/all, preview, content stream, review, delete, reviews, health check)
 - **Event Endpoints**:
@@ -1539,10 +1850,11 @@
 
 ## Authorization Levels
 
-- **No Auth Required**: Signup endpoints, login, root
+- **No Auth Required**: Signup endpoints, login, root, public searches (`/instalaciones/buscar/municipio/`, `/instalaciones/tipo/`)
 - **User Auth Required**: Most endpoints (authenticated users)
+- **Owner/User Only**: View/update own instalaciones, view/link documents
 - **Veterinarian Only**: `/bovinos/search`, veterinary event creation
-- **Admin Only**: Admin user management, document review, list all documents
+- **Admin/Inspector Only**: Document review/approval, deactivate facilities, manage UPP renewals
 - **SuperAdmin Only**: Administrator creation
 
 ---
@@ -1563,5 +1875,6 @@ All list endpoints support:
 
 ---
 
-**Last Updated**: March 14, 2026  
+**Last Updated**: March 16, 2026  
 **API Version**: 1.0
+**Recent Addition**: Instalaciones (Facilities) system with UPP renewal tracking

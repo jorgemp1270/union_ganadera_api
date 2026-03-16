@@ -14,6 +14,9 @@ CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reve
 -- Enum for document review status
 CREATE TYPE doc_review_status_enum AS ENUM ('pendiente', 'aprobado', 'rechazado');
 
+-- Enum for facility types
+CREATE TYPE facility_type_enum AS ENUM ('UPP', 'PSG', 'SUBASTA', 'RASTRO', 'FERIA', 'EXPORT_CENTER', 'QUARANTINE_CENTER');
+
 -- 2. BASE TABLES
 -- ---------------------------------------------------------
 
@@ -74,9 +77,26 @@ CREATE TABLE inspectores (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE instalaciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    usuario_id UUID NOT NULL REFERENCES usuarios(id),
+    nombre VARCHAR(150) NOT NULL,
+    facility_type facility_type_enum NOT NULL,
+    status VARCHAR(20) DEFAULT 'activa',
+    latitud DECIMAL(9, 6),
+    longitud DECIMAL(9, 6),
+    estado VARCHAR(50) NOT NULL,
+    municipio VARCHAR(50) NOT NULL,
+    created_by_admin UUID REFERENCES usuarios(id),
+    license_number VARCHAR(50) NOT NULL UNIQUE,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE predios (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     usuario_id UUID NOT NULL REFERENCES usuarios(id),
+    facility_id UUID REFERENCES instalaciones(id),
     clave_catastral VARCHAR(50) UNIQUE,
     superficie_total DECIMAL(10, 2),
     latitud DECIMAL(9, 6),
@@ -93,6 +113,37 @@ CREATE TABLE documentos (
     original_filename TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     authored BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE instalacion_documentos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    instalacion_id UUID NOT NULL REFERENCES instalaciones(id) ON DELETE CASCADE,
+    documento_id UUID NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
+    documento_tipo VARCHAR(50) NOT NULL,
+    status doc_review_status_enum DEFAULT 'pendiente',
+    comentario_rechazo TEXT,
+    review_date TIMESTAMPTZ,
+    reviewed_by UUID REFERENCES usuarios(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE instalacion_documento_requerimientos (
+    id SERIAL PRIMARY KEY,
+    facility_type facility_type_enum NOT NULL UNIQUE,
+    documentos_requeridos TEXT[] NOT NULL,
+    descripcion TEXT
+);
+
+CREATE TABLE renovaciones_upp (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    instalacion_id UUID NOT NULL REFERENCES instalaciones(id) ON DELETE CASCADE,
+    solicitada_por UUID NOT NULL REFERENCES usuarios(id),
+    estado VARCHAR(20) DEFAULT 'pendiente',
+    fecha_solicitud TIMESTAMPTZ DEFAULT NOW(),
+    fecha_proximo_vencimiento DATE,
+    aprobada_por UUID REFERENCES usuarios(id),
+    fecha_aprobacion TIMESTAMPTZ,
+    comentarios TEXT
 );
 
 -- 4. LIVESTOCK CORE
@@ -276,6 +327,19 @@ CREATE INDEX idx_pesos_evento ON pesos(evento_id);
 CREATE INDEX idx_vacunas_evento ON vacunaciones(evento_id);
 CREATE INDEX idx_vacunas_vet ON vacunaciones(veterinario_id);
 CREATE INDEX idx_enfermedades_evento ON enfermedades(evento_id);
+
+CREATE INDEX idx_instalaciones_usuario ON instalaciones(usuario_id);
+CREATE INDEX idx_instalaciones_facility_type ON instalaciones(facility_type);
+CREATE INDEX idx_instalaciones_active ON instalaciones(active);
+
+CREATE INDEX idx_predios_facility ON predios(facility_id);
+
+CREATE INDEX idx_instalacion_documentos_instalacion ON instalacion_documentos(instalacion_id);
+CREATE INDEX idx_instalacion_documentos_documento ON instalacion_documentos(documento_id);
+CREATE INDEX idx_instalacion_documentos_status ON instalacion_documentos(status);
+
+CREATE INDEX idx_renovaciones_upp_instalacion ON renovaciones_upp(instalacion_id);
+CREATE INDEX idx_renovaciones_upp_estado ON renovaciones_upp(estado);
 
 -- 9. TRIGGERS & FUNCTIONS (Automation)
 -- ---------------------------------------------------------
@@ -682,4 +746,18 @@ BEGIN
 
     RETURN _evento_id;
 END;
+$$ LANGUAGE plpgsql;
+
+-- 10. INITIALIZATION DATA
+-- ---------------------------------------------------------
+
+-- Document requirements for each facility type
+INSERT INTO instalacion_documento_requerimientos (facility_type, documentos_requeridos, descripcion) VALUES
+('UPP', ARRAY['constancia_fiscal', 'certificado_parcelario', 'contrato_arrendamiento', 'clave_catastral'], 'Unidad de Producción Pecuaria - Productor ganadero'),
+('PSG', ARRAY['identificacion', 'rfc', 'comprobante_domicilio', 'acta_constitutiva', 'permiso_funcionamiento'], 'Productor de Servicios Ganaderos - Centro de servicios'),
+('SUBASTA', ARRAY['permiso_subasta', 'comprobante_domicilio', 'rfc', 'identificacion'], 'Subasta ganadera'),
+('RASTRO', ARRAY['permiso_rastro', 'certificado_inspecciones', 'rfc', 'identificacion'], 'Centro de sacrificio'),
+('FERIA', ARRAY['permiso_feria', 'comprobante_domicilio', 'rfc'], 'Feria ganadera'),
+('EXPORT_CENTER', ARRAY['permiso_exportacion', 'certificado_calidad', 'rfc', 'identificacion', 'comprobante_domicilio'], 'Centro de exportación'),
+('QUARANTINE_CENTER', ARRAY['permiso_cuarentena', 'comprobante_domicilio', 'rfc', 'certificado_veterinario'], 'Centro de cuarentena');
 $$ LANGUAGE plpgsql;
