@@ -41,6 +41,7 @@ class FacilityTypeEnum(str, enum.Enum):
     FERIA = "FERIA"
     EXPORT_CENTER = "EXPORT_CENTER"
     QUARANTINE_CENTER = "QUARANTINE_CENTER"
+    CASETA_INSPECCION = "CASETA_INSPECCION"
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -131,7 +132,7 @@ class Bovino(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"))
-    predio_id = Column(UUID(as_uuid=True), ForeignKey("predios.id"), nullable=True)
+    instalacion_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id"), nullable=True)
 
     arete_barcode = Column(String, unique=True)
     arete_rfid = Column(String, unique=True)
@@ -155,22 +156,20 @@ class Bovino(Base):
 
     usuario = relationship("Usuario", back_populates="bovinos", foreign_keys=[usuario_id])
     eventos = relationship("Evento", back_populates="bovino")
-    predio = relationship("Predio", back_populates="bovinos")
+    instalacion = relationship("Instalacion", back_populates="bovinos")
 
 class Predio(Base):
     __tablename__ = "predios"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
-    facility_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id"), nullable=True)
     clave_catastral = Column(String(50), unique=True)
     superficie_total = Column(Numeric(10, 2))
     latitud = Column(Numeric(9, 6))
     longitud = Column(Numeric(9, 6))
 
     usuario = relationship("Usuario", back_populates="predios")
-    bovinos = relationship("Bovino", back_populates="predio")
-    instalacion = relationship("Instalacion", back_populates="predios")
+    instalaciones = relationship("InstalacionPredio", back_populates="predio", cascade="all, delete-orphan")
 
 class Evento(Base):
     __tablename__ = "eventos"
@@ -319,12 +318,25 @@ class Instalacion(Base):
     created_by_admin = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     license_number = Column(String(50), unique=True, nullable=False)
     active = Column(Boolean, default=True)
+    fecha_vencimiento = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     usuario = relationship("Usuario", back_populates="instalaciones", foreign_keys=[usuario_id])
-    predios = relationship("Predio", back_populates="instalacion")
+    predios = relationship("InstalacionPredio", back_populates="instalacion", cascade="all, delete-orphan")
+    bovinos = relationship("Bovino", back_populates="instalacion")
     documentos = relationship("InstalacionDocumento", back_populates="instalacion", cascade="all, delete-orphan")
     renovaciones = relationship("RenovacionUPP", back_populates="instalacion", cascade="all, delete-orphan")
+
+
+class InstalacionPredio(Base):
+    """Junction table for many-to-many relationship between Instalacion and Predio"""
+    __tablename__ = "instalacion_predio"
+
+    upp_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+    predio_id = Column(UUID(as_uuid=True), ForeignKey("predios.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+
+    instalacion = relationship("Instalacion", back_populates="predios")
+    predio = relationship("Predio", back_populates="instalaciones")
 
 
 class InstalacionDocumento(Base):

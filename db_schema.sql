@@ -15,7 +15,7 @@ CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reve
 CREATE TYPE doc_review_status_enum AS ENUM ('pendiente', 'aprobado', 'rechazado');
 
 -- Enum for facility types
-CREATE TYPE facility_type_enum AS ENUM ('UPP', 'PSG', 'SUBASTA', 'RASTRO', 'FERIA', 'EXPORT_CENTER', 'QUARANTINE_CENTER');
+CREATE TYPE facility_type_enum AS ENUM ('UPP', 'PSG', 'SUBASTA', 'RASTRO', 'FERIA', 'EXPORT_CENTER', 'QUARANTINE_CENTER', 'CASETA_INSPECCION');
 
 -- 2. BASE TABLES
 -- ---------------------------------------------------------
@@ -90,17 +90,24 @@ CREATE TABLE instalaciones (
     created_by_admin UUID REFERENCES usuarios(id),
     license_number VARCHAR(50) NOT NULL UNIQUE,
     active BOOLEAN DEFAULT TRUE,
+    fecha_vencimiento DATE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE predios (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     usuario_id UUID NOT NULL REFERENCES usuarios(id),
-    facility_id UUID REFERENCES instalaciones(id),
     clave_catastral VARCHAR(50) UNIQUE,
     superficie_total DECIMAL(10, 2),
     latitud DECIMAL(9, 6),
     longitud DECIMAL(9, 6)
+);
+
+-- Junction table for many-to-many relationship between Instalacion and Predio
+CREATE TABLE instalacion_predio (
+    upp_id UUID NOT NULL REFERENCES instalaciones(id) ON DELETE CASCADE,
+    predio_id UUID NOT NULL REFERENCES predios(id) ON DELETE CASCADE,
+    PRIMARY KEY (upp_id, predio_id)
 );
 
 -- 3. FILE STORAGE
@@ -152,7 +159,7 @@ CREATE TABLE renovaciones_upp (
 CREATE TABLE bovinos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     usuario_id UUID REFERENCES usuarios(id),
-    predio_id UUID REFERENCES predios(id), -- This gets cleared on sale
+    instalacion_id UUID REFERENCES instalaciones(id),
 
     arete_barcode VARCHAR(50) UNIQUE,
     arete_rfid VARCHAR(50) UNIQUE,
@@ -316,7 +323,7 @@ CREATE INDEX idx_documento_revisiones_doc ON documento_revisiones(documento_id);
 CREATE INDEX idx_documento_revisiones_admin ON documento_revisiones(admin_id);
 
 CREATE INDEX idx_bovinos_usuario ON bovinos(usuario_id);
-CREATE INDEX idx_bovinos_predio ON bovinos(predio_id);
+CREATE INDEX idx_bovinos_instalacion ON bovinos(instalacion_id);
 CREATE INDEX idx_bovinos_madre ON bovinos(madre_id);
 CREATE INDEX idx_bovinos_padre ON bovinos(padre_id);
 
@@ -331,8 +338,11 @@ CREATE INDEX idx_enfermedades_evento ON enfermedades(evento_id);
 CREATE INDEX idx_instalaciones_usuario ON instalaciones(usuario_id);
 CREATE INDEX idx_instalaciones_facility_type ON instalaciones(facility_type);
 CREATE INDEX idx_instalaciones_active ON instalaciones(active);
+CREATE INDEX idx_instalaciones_fecha_vencimiento ON instalaciones(fecha_vencimiento);
 
-CREATE INDEX idx_predios_facility ON predios(facility_id);
+CREATE INDEX idx_predios_facility ON predios(usuario_id);
+CREATE INDEX idx_instalacion_predio_upp ON instalacion_predio(upp_id);
+CREATE INDEX idx_instalacion_predio_predio ON instalacion_predio(predio_id);
 
 CREATE INDEX idx_instalacion_documentos_instalacion ON instalacion_documentos(instalacion_id);
 CREATE INDEX idx_instalacion_documentos_documento ON instalacion_documentos(documento_id);

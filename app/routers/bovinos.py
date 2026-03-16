@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 from typing import List, Annotated
+from datetime import date
 import os
 import uuid as uuid_lib
 from .. import crud, models, schemas, auth, database
@@ -64,16 +65,16 @@ def _with_parents(bovino: models.Bovino, db: Session, current_user_id) -> dict:
 
 @router.get("/", response_model=List[schemas.BovinoResponse])
 async def read_bovinos(skip: int = 0, limit: int = 100,
-                       predio_id: str = None,
+                       instalacion_id: str = None,
                        current_user: models.Usuario = Depends(auth.get_current_user),
                        db: Session = Depends(database.get_db)):
-    if predio_id:
-        db_predio = crud.get_predio(db, predio_id=predio_id)
-        if db_predio is None:
-            raise HTTPException(status_code=404, detail="Predio not found")
-        if db_predio.usuario_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to view bovinos for this predio")
-    bovinos = crud.get_bovinos(db, user_id=current_user.id, skip=skip, limit=limit, predio_id=predio_id)
+    if instalacion_id:
+        db_instalacion = db.query(models.Instalacion).filter(models.Instalacion.id == instalacion_id).first()
+        if db_instalacion is None:
+            raise HTTPException(status_code=404, detail="Instalacion not found")
+        if db_instalacion.usuario_id != current_user.id and current_user.rol not in ["administrador", "superadministrador", "inspector"]:
+            raise HTTPException(status_code=403, detail="Not authorized to view bovinos for this instalacion")
+    bovinos = crud.get_bovinos(db, user_id=current_user.id, skip=skip, limit=limit, instalacion_id=instalacion_id)
     return [_with_nariz_url(b) for b in bovinos]
 
 @router.get("/search", response_model=schemas.BovinoResponse)
@@ -124,12 +125,37 @@ async def read_bovino(bovino_id: str,
 async def create_bovino(bovino: schemas.BovinoCreate,
                         current_user: models.Usuario = Depends(auth.get_current_user),
                         db: Session = Depends(database.get_db)):
-    if bovino.predio_id:
-        db_predio = crud.get_predio(db, predio_id=str(bovino.predio_id))
-        if db_predio is None:
-            raise HTTPException(status_code=404, detail="Predio not found")
-        if db_predio.usuario_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to assign this predio")
+    """
+    Create a new bovino.
+    If instalacion_id is provided, validates:
+    - Instalacion exists and belongs to user
+    - Instalacion is active (active = True)
+    - Instalacion is not expired (fecha_vencimiento > today or null for non-UPP/PSG)
+    """
+    if bovino.instalacion_id:
+        db_instalacion = db.query(models.Instalacion).filter(
+            models.Instalacion.id == bovino.instalacion_id
+        ).first()
+        if db_instalacion is None:
+            raise HTTPException(status_code=404, detail="Instalacion not found")
+        if db_instalacion.usuario_id != current_user.id and current_user.rol not in ["administrador", "superadministrador", "inspector"]:
+            raise HTTPException(status_code=403, detail="Not authorized to use this instalacion")
+        
+        # Validate instalacion is active
+        if not db_instalacion.active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot create bovino: Instalacion is not active"
+            )
+        
+        # Validate instalacion is not expired (for UPP/PSG types)
+        if db_instalacion.facility_type in [models.FacilityTypeEnum.UPP, models.FacilityTypeEnum.PSG]:
+            if db_instalacion.fecha_vencimiento and db_instalacion.fecha_vencimiento < date.today():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot create bovino: Instalacion license has expired"
+                )
+    
     db_bovino = crud.create_bovino(db=db, bovino=bovino, user_id=current_user.id)
     return _with_nariz_url(db_bovino)
 
@@ -142,7 +168,7 @@ async def update_bovino(bovino_id: str, bovino: schemas.BovinoUpdate,
         raise HTTPException(status_code=404, detail="Bovino not found")
     if db_bovino.usuario_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this bovino")
-    # predio_id updates are not accepted here — use a traslado event instead
+    # instalacion_id updates are not accepted here — use a traslado event instead
     db_bovino = crud.update_bovino(db=db, bovino_id=bovino_id, bovino=bovino)
     return _with_nariz_url(db_bovino)
 

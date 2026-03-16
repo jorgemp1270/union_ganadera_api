@@ -227,14 +227,14 @@ def create_inspector(db: Session, inspector: schemas.InspectorCreate, created_by
 
     return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
 
-def get_bovinos(db: Session, user_id: str, skip: int = 0, limit: int = 100, predio_id: str = None):
+def get_bovinos(db: Session, user_id: str, skip: int = 0, limit: int = 100, instalacion_id: str = None):
     query = db.query(models.Bovino).filter(models.Bovino.usuario_id == user_id)
-    if predio_id:
-        query = query.filter(models.Bovino.predio_id == predio_id)
+    if instalacion_id:
+        query = query.filter(models.Bovino.instalacion_id == instalacion_id)
     return query.offset(skip).limit(limit).all()
 
-def get_bovinos_by_predio(db: Session, predio_id: str, skip: int = 0, limit: int = 100):
-    return db.query(models.Bovino).filter(models.Bovino.predio_id == predio_id).offset(skip).limit(limit).all()
+def get_bovinos_by_instalacion(db: Session, instalacion_id: str, skip: int = 0, limit: int = 100):
+    return db.query(models.Bovino).filter(models.Bovino.instalacion_id == instalacion_id).offset(skip).limit(limit).all()
 
 def search_bovino(db: Session, arete_barcode: str = None, arete_rfid: str = None, nombre: str = None):
     """

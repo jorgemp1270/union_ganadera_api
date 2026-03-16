@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Annotated
+from datetime import date
 from .. import crud, models, schemas, auth, database
 
 router = APIRouter(
@@ -50,6 +51,28 @@ async def create_evento(evento: schemas.EventoCreateRequest,
                     status_code=403,
                     detail="vendedor_curp must match the authenticated user's CURP"
                 )
+
+    # VALIDATION: Check instalacion status before creating any event (except compraventa which transfers ownership)
+    if evento.type != 'compraventa' and db_bovino.instalacion_id:
+        db_instalacion = db.query(models.Instalacion).filter(
+            models.Instalacion.id == db_bovino.instalacion_id
+        ).first()
+        
+        if db_instalacion:
+            # Cannot create events if instalacion is not active
+            if not db_instalacion.active:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot create event: Bovino's facility (instalacion) is not active"
+                )
+            
+            # Cannot create events if UPP/PSG license is expired
+            if db_instalacion.facility_type in [models.FacilityTypeEnum.UPP, models.FacilityTypeEnum.PSG]:
+                if db_instalacion.fecha_vencimiento and db_instalacion.fecha_vencimiento < date.today():
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Cannot create event: Facility license (UPP/PSG) has expired"
+                    )
 
     db_evento = crud.create_evento(db, evento)
     if db_evento is None:

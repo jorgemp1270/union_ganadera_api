@@ -88,7 +88,7 @@ class BovinoBase(BaseModel):
     nombre: Optional[str] = None
     madre_id: Optional[UUID] = None
     padre_id: Optional[UUID] = None
-    predio_id: Optional[UUID] = None
+    instalacion_id: Optional[UUID] = None
     raza_dominante: Optional[str] = None
     fecha_nac: Optional[date] = None
     sexo: Optional[SexoEnum] = None
@@ -101,7 +101,7 @@ class BovinoCreate(BovinoBase):
 
 class BovinoUpdate(BaseModel):
     # Only allow updating user-modifiable fields
-    # predio_id is intentionally excluded — use a traslado event to move a bovino between predios
+    # instalacion_id is managed through traslado events
     arete_barcode: Optional[str] = None
     arete_rfid: Optional[str] = None
     nombre: Optional[str] = None

@@ -1,7 +1,43 @@
 # Union Ganadera API - Complete Endpoint Catalog
 
 **API Base URL**: `http://localhost:8000/api`  
-**Total Endpoints**: 89 (across 17 routers)
+**Total Endpoints**: 92 (3 nuevos endpoints de instalaciones)  
+**Last Updated**: Marzo 16, 2026 - **MAJOR REFACTOR: Architecture Changes**
+
+---
+
+## 📋 CAMBIOS ARQUITECTÓNICOS PRINCIPALES (Marzo 16, 2026)
+
+### ⚠️ BREAKING CHANGES
+
+1. **Relación Bovino** (IMPORTANTE)
+   - ❌ `bovino.predio_id` fue REMOVIDO
+   - ✅ `bovino.instalacion_id` fue AGREGADO
+   - Bovinos ahora se relacionan directamente a instalaciones
+
+2. **Relación Predio-Instalación** (IMPORTANTE)
+   - ❌ `predio.facility_id` fue REMOVIDO
+   - ✅ Nueva tabla: `instalacion_predio` (many-to-many junction)
+   - Una instalación puede tener múltiples predios
+   - Un predio puede vincularse a múltiples instalaciones
+
+3. **Control de Tipos por Rol** (NUEVO)
+   - Usuarios normales: Solo pueden crear **UPP** y **PSG**
+   - Administradores: Pueden crear TODOS los tipos
+   - **Nuevo tipo**: `CASETA_INSPECCION` (solo admin)
+
+4. **Validaciones de Estado** (NUEVO)
+   - No se pueden crear bovinos si instalación no está activa
+   - No se pueden crear eventos si instalación está vencida
+   - Campo `fecha_vencimiento` en Instalacion
+
+5. **Privacidad** (NUEVO)
+   - Usuarios normales: Solo ven sus propias instalaciones
+   - Nuevo endpoint: GET `/instalaciones/buscar/codigo/{license_number}` (público)
+   - Previene búsqueda exhaustiva de instalaciones de otros usuarios
+
+### Referencias Completas
+Consulta [ARQUITECTURA_REFACTOR_MARZO_2026.md](ARQUITECTURA_REFACTOR_MARZO_2026.md) para detalles completos.
 
 ---
 
@@ -199,7 +235,7 @@
 ---
 
 ### GET `/normales-y-veterinarios`
-**Description**: List all normal users (ganaderos) and veterinarians  
+**Description**: List all normal users (ganaderos) and veterinarians (who are users with extra health event permissions)  
 **Auth Required**: Yes (administrador+)  
 **Query Parameters**: None  
 **Response** (200): `List[UserListResponse]`
@@ -318,7 +354,7 @@
 **Query Parameters**:
 - `skip`: int (default: 0)
 - `limit`: int (default: 100)
-- `predio_id`: UUID (optional - filter by predio)
+- `instalacion_id`: UUID (optional - filter by instalacion) **[CHANGED: was `predio_id`]**
 
 **Response** (200): `List[BovinoResponse]`
 ```json
@@ -340,7 +376,7 @@
     "status": "string",
     "madre_id": "uuid | null",
     "padre_id": "uuid | null",
-    "predio_id": "uuid | null",
+    "instalacion_id": "uuid | null",
     "nariz_storage_key": "string | null",
     "nariz_url": "presigned-url | null",
     "madre": { /* BovinoParentPublic or null */ },
@@ -386,7 +422,7 @@
   "nombre": "string | null",
   "madre_id": "uuid | null",
   "padre_id": "uuid | null",
-  "predio_id": "uuid | null",
+  "instalacion_id": "uuid | null",
   "raza_dominante": "string | null",
   "fecha_nac": "YYYY-MM-DD | null",
   "sexo": "M | F | X | null",
@@ -395,6 +431,14 @@
   "proposito": "string | null"
 }
 ```
+
+**Validations** (HTTP 409 Conflict if fails):
+- If `instalacion_id` provided:
+  - Instalacion must exist and belong to user (or user is admin)
+  - Instalacion.active must be TRUE
+  - If instalacion is UPP/PSG:
+    - Instalacion.fecha_vencimiento must be NULL or > today
+
 **Response** (201): `BovinoResponse`
 
 ---
@@ -547,12 +591,17 @@
 ### POST `/instalaciones/`
 **Description**: Create a new facility/installation  
 **Auth Required**: Yes  
+
+**Role-Based Facility Types** (HTTP 403 if unauthorized):
+- **Usuario (normal users)**: Can ONLY create `UPP`, `PSG`
+- **Administrador/SuperAdministrador**: Can create ALL types including `CASETA_INSPECCION`
+
 **Request Body**:
 ```json
 {
   "usuario_id": "uuid | null (defaults to current user)",
   "nombre": "string",
-  "facility_type": "UPP | PSG | SUBASTA | RASTRO | FERIA | EXPORT_CENTER | QUARANTINE_CENTER",
+  "facility_type": "UPP | PSG | SUBASTA | RASTRO | FERIA | EXPORT_CENTER | QUARANTINE_CENTER | CASETA_INSPECCION",
   "status": "activa (default)",
   "latitud": "float | null",
   "longitud": "float | null",
@@ -576,6 +625,7 @@
   "municipio": "string",
   "license_number": "string",
   "active": "boolean",
+  "fecha_vencimiento": "YYYY-MM-DD | null",
   "created_at": "ISO-8601 datetime"
 }
 ```
@@ -583,6 +633,12 @@
 ### GET `/instalaciones/`
 **Description**: List all facilities (admins see all, users see only theirs)  
 **Auth Required**: Yes  
+
+**Privacy Rules**:
+- **Normal users**: See ONLY their own instalaciones (usuario_id = authenticated user)
+- **Admins/Inspectors**: See ALL instalaciones
+- To find external facilities: Use `GET /instalaciones/buscar/codigo/{license_number}`
+
 **Query Parameters**:
 - `facility_type`: string (optional, filter by type)
 - `estado`: string (optional, filter by state)
@@ -799,7 +855,25 @@
 **Path Parameters**:
 - `renovacion_id`: UUID
 
-**Response** (200): `RenovacionUPPResponse` with "aprobada" status and new expiration date
+**Side Effects**:
+- Sets `instalacion.fecha_vencimiento = today + 365 days`
+- Sets `renovacion.fecha_proximo_vencimiento = today + 365 days`
+- Blocks future creation of bovinos/eventos if fecha_vencimiento passes
+
+**Response** (200): `RenovacionUPPResponse`
+```json
+{
+  "id": "uuid",
+  "instalacion_id": "uuid",
+  "solicitada_por": "uuid",
+  "estado": "aprobada",
+  "fecha_solicitud": "ISO-8601 datetime",
+  "fecha_proximo_vencimiento": "YYYY-MM-DD",
+  "aprobada_por": "uuid",
+  "fecha_aprobacion": "ISO-8601 datetime",
+  "comentarios": "string | null"
+}
+```
 
 ---
 
@@ -826,6 +900,43 @@
 - `facility_type`: string (optional)
 
 **Response** (200): List of `InstalacionResponse`
+
+---
+
+### GET `/instalaciones/buscar/codigo/{license_number}`
+**Description**: Search for a facility by its UPP/PSG license code (public discovery)  
+**Auth Required**: No  
+**Path Parameters**:
+- `license_number`: string (unique license code)
+
+**Purpose**: 
+- Allows users to discover and interact with external facilities
+- Prevents exhaustive searches (must know exact code)
+- Helps prevent crimes and extortions by controlling visibility
+
+**Response** (200): `InstalacionResponse` (basic info only)
+```json
+{
+  "id": "uuid",
+  "usuario_id": "uuid",
+  "nombre": "string",
+  "facility_type": "string",
+  "status": "string",
+  "latitud": "float | null",
+  "longitud": "float | null",
+  "estado": "string",
+  "municipio": "string",
+  "license_number": "string",
+  "active": "boolean",
+  "created_at": "ISO-8601 datetime"
+}
+```
+
+**Example Usage**:
+```bash
+# Find a specific UPP by code
+GET /api/instalaciones/buscar/codigo/UPP-2026-001234
+```
 
 ---
 
@@ -1875,6 +1986,7 @@ All list endpoints support:
 
 ---
 
-**Last Updated**: March 16, 2026  
-**API Version**: 1.0
-**Recent Addition**: Instalaciones (Facilities) system with UPP renewal tracking
+**Last Updated**: Marzo 16, 2026  
+**API Version**: 1.0.1
+**Status**: ✅ Production Ready with Major Architecture Refactor
+**Breaking Changes**: Yes - See top section for details

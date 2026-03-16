@@ -6,7 +6,7 @@ from uuid import UUID
 import uuid
 
 from ..database import get_db
-from ..models import Instalacion, Predio, Usuario, InstalacionDocumento, RenovacionUPP, Documento, FacilityTypeEnum, DocReviewStatusEnum
+from ..models import Instalacion, Predio, Usuario, InstalacionDocumento, RenovacionUPP, Documento, FacilityTypeEnum, DocReviewStatusEnum, InstalacionPredio
 from ..auth import get_current_user, require_admin
 from ..schemas import (
     InstalacionCreate,
@@ -30,8 +30,24 @@ def crear_instalacion(
 ):
     """
     Create a new facility/installation (UPP, PSG, Rastro, etc.)
-    Only admins or the owner can create.
+    - Normal users (usuario): Can only create UPP and PSG
+    - Veterinarians (veterinario): Can only create UPP and PSG (same as normal users)
+    - Admins/SuperAdmins: Can create all types including CASETA_INSPECCION
     """
+    
+    # Validate facility type based on user role
+    if current_user.rol in ["usuario", "veterinario"]:
+        # Normal users and veterinarians can only create UPP and PSG
+        if request.facility_type not in [FacilityTypeEnum.UPP, FacilityTypeEnum.PSG]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Users (normal and veterinarians) can only create UPP and PSG facilities"
+            )
+    elif current_user.rol not in ["administrador", "superadministrador"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create other facility types"
+        )
     
     # Check if license_number is already taken
     existing = db.query(Instalacion).filter(
@@ -52,9 +68,10 @@ def crear_instalacion(
         longitud=request.longitud,
         estado=request.estado,
         municipio=request.municipio,
-        created_by_admin=current_user.id if current_user.rol == "admin" or current_user.rol == "superadmin" else None,
+        created_by_admin=current_user.id if current_user.rol in ["administrador", "superadministrador"] else None,
         license_number=request.license_number,
         active=request.active or True,
+        fecha_vencimiento=None,  # Will be set when UPP renewal is approved
     )
     
     db.add(new_instalacion)
@@ -74,13 +91,17 @@ def listar_instalaciones(
 ):
     """
     List all installations. 
-    - Admins see all
-    - Users only see their own
+    - Normal users (usuario): See only their own UPPs and PSGs
+    - Veterinarians (veterinario): See only their own UPPs and PSGs (same as normal users)
+    - Admins/Inspectors: See all
+    
+    Privacy Note: Normal users and veterinarians cannot see other users' facilities exhaustively.
+    Use GET /instalaciones/buscar/codigo/{license_number} to search external facilities by code.
     """
     query = db.query(Instalacion)
     
-    # Filter by user if not admin
-    if current_user.rol not in ["admin", "superadmin", "inspector"]:
+    # Filter by user if not admin/inspector
+    if current_user.rol not in ["administrador", "superadministrador", "inspector"]:
         query = query.filter(Instalacion.usuario_id == current_user.id)
     
     # Additional filters
@@ -442,6 +463,7 @@ def aprobar_renovacion_upp(
     """
     Approve UPP renewal (extends license for 365 days)
     Admins/Inspectors only
+    Sets fecha_vencimiento on the installation to 365 days from today
     """
     renovacion = db.query(RenovacionUPP).filter(RenovacionUPP.id == renovacion_id).first()
     if not renovacion:
@@ -450,10 +472,18 @@ def aprobar_renovacion_upp(
             detail="Renovación not found"
         )
     
+    # Calculate expiration date
+    expiration_date = date.today() + timedelta(days=365)
+    
     renovacion.estado = "aprobada"
     renovacion.aprobada_por = current_user.id
     renovacion.fecha_aprobacion = datetime.utcnow()
-    renovacion.fecha_proximo_vencimiento = date.today() + timedelta(days=365)
+    renovacion.fecha_proximo_vencimiento = expiration_date
+    
+    # Also update the installation's fecha_vencimiento
+    instalacion = db.query(Instalacion).filter(Instalacion.id == renovacion.instalacion_id).first()
+    if instalacion:
+        instalacion.fecha_vencimiento = expiration_date
     
     db.commit()
     db.refresh(renovacion)
@@ -529,3 +559,27 @@ def buscar_por_tipo(
         query = query.filter(Instalacion.estado == estado)
     
     return query.all()
+
+
+# SEARCH - Find by UPP code (license_number) - Public, for external facility discovery
+@router.get("/buscar/codigo/{license_number}", response_model=InstalacionResponse)
+def buscar_por_codigo(
+    license_number: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Search for a facility by its UPP/PSG license code.
+    This endpoint is public and allows users to find external installations.
+    Returns basic info only (no documents, no detailed predios).
+    """
+    instalacion = db.query(Instalacion).filter(
+        Instalacion.license_number == license_number
+    ).first()
+    
+    if not instalacion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Facility with code '{license_number}' not found"
+        )
+    
+    return instalacion
