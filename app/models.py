@@ -56,7 +56,7 @@ class Usuario(Base):
     documentos = relationship("Documento", back_populates="usuario")
     domicilios = relationship("Domicilio", back_populates="usuario")
     predios = relationship("Predio", back_populates="usuario")
-    instalaciones = relationship("Instalacion", back_populates="usuario")
+    instalaciones = relationship("Instalacion", back_populates="usuario", foreign_keys="[Instalacion.usuario_id]")
 
 class Domicilio(Base):
     __tablename__ = "domicilios"
