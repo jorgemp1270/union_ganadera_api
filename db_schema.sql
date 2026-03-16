@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE sexo_enum AS ENUM ('M', 'F', 'X');
 
 -- Enum for User Roles
-CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'admin', 'superadmin', 'inspector', 'ban');
+CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'administrador', 'superadministrador', 'inspector', 'ban');
 
 -- Enum for document types
 CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reverso', 'comprobante_domicilio', 'predio', 'cedula_veterinario', 'nariz', 'fierro', 'otro');
