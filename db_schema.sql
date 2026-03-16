@@ -760,4 +760,3 @@ INSERT INTO instalacion_documento_requerimientos (facility_type, documentos_requ
 ('FERIA', ARRAY['permiso_feria', 'comprobante_domicilio', 'rfc'], 'Feria ganadera'),
 ('EXPORT_CENTER', ARRAY['permiso_exportacion', 'certificado_calidad', 'rfc', 'identificacion', 'comprobante_domicilio'], 'Centro de exportación'),
 ('QUARANTINE_CENTER', ARRAY['permiso_cuarentena', 'comprobante_domicilio', 'rfc', 'certificado_veterinario'], 'Centro de cuarentena');
-$$ LANGUAGE plpgsql;
