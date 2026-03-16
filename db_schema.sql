@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE sexo_enum AS ENUM ('M', 'F', 'X');
 
 -- Enum for User Roles
-CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'admin', 'ban');
+CREATE TYPE rol_enum AS ENUM ('usuario', 'veterinario', 'admin', 'superadmin', 'inspector', 'ban');
 
 -- Enum for document types
 CREATE TYPE doc_type_enum AS ENUM ('identificacion_frente', 'identificacion_reverso', 'comprobante_domicilio', 'predio', 'cedula_veterinario', 'nariz', 'fierro', 'otro');
@@ -52,6 +52,26 @@ CREATE TABLE veterinarios (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     usuario_id UUID NOT NULL UNIQUE REFERENCES usuarios(id),
     cedula VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE administradores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    usuario_id UUID NOT NULL UNIQUE REFERENCES usuarios(id),
+    creado_por_id UUID REFERENCES usuarios(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE superadministradores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    usuario_id UUID NOT NULL UNIQUE REFERENCES usuarios(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE inspectores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    usuario_id UUID NOT NULL UNIQUE REFERENCES usuarios(id),
+    creado_por_id UUID REFERENCES usuarios(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE predios (

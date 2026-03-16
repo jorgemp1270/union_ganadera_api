@@ -95,3 +95,133 @@ async def login_for_access_token(user_credentials: schemas.UserLogin, db: Sessio
 @router.get("/users/me", response_model=schemas.UserResponse)
 async def read_users_me(current_user: Annotated[models.Usuario, Depends(auth.get_current_user)]):
     return current_user
+
+@router.post("/signup/administrador", response_model=schemas.UserResponse)
+async def create_administrador(
+    administrador: schemas.AdministradorCreate,
+    current_user: Annotated[models.Usuario, Depends(auth.require_super_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Create a new administrador user.
+    Only a superadministrador can create administrators.
+    """
+    db_user = crud.get_user_by_username(db, username=administrador.curp)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    return crud.create_administrador(db=db, administrador=administrador, created_by_user_id=current_user.id)
+
+@router.post("/signup/inspector", response_model=schemas.UserResponse)
+async def create_inspector(
+    inspector: schemas.InspectorCreate,
+    current_user: Annotated[models.Usuario, Depends(auth.require_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Create a new inspector user.
+    Only an administrador or superadministrador can create inspectors.
+    """
+    db_user = crud.get_user_by_username(db, username=inspector.curp)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    return crud.create_inspector(db=db, inspector=inspector, created_by_user_id=current_user.id)
+
+@router.get("/administradores", response_model=list[schemas.UserResponse])
+async def get_administradores(
+    current_user: Annotated[models.Usuario, Depends(auth.require_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get all administradores and superadministradores.
+    Only administradores and superadministradores can view this list.
+    """
+    return db.query(models.Usuario).filter(
+        models.Usuario.rol.in_([models.RolEnum.administrador, models.RolEnum.superadministrador])
+    ).all()
+
+@router.get("/inspectores", response_model=list[schemas.UserResponse])
+async def get_inspectores(
+    current_user: Annotated[models.Usuario, Depends(auth.require_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get all inspectors.
+    Only administradores and superadministradores can view this list.
+    """
+    return db.query(models.Usuario).filter(models.Usuario.rol == models.RolEnum.inspector).all()
+
+@router.get("/administradores/{admin_id}", response_model=schemas.UserResponse)
+async def get_administrador(
+    admin_id: str,
+    current_user: Annotated[models.Usuario, Depends(auth.require_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get a specific administrador by ID.
+    Only administradores and superadministradores can access this endpoint.
+    """
+    admin = db.query(models.Usuario).filter(
+        models.Usuario.id == admin_id,
+        models.Usuario.rol == models.RolEnum.administrador
+    ).first()
+    if not admin:
+        raise HTTPException(status_code=404, detail="Administrador not found")
+    return admin
+
+@router.get("/inspectores/{inspector_id}", response_model=schemas.UserResponse)
+async def get_inspector(
+    inspector_id: str,
+    current_user: Annotated[models.Usuario, Depends(auth.require_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get a specific inspector by ID.
+    Only administradores and superadministradores can access this endpoint.
+    """
+    inspector = db.query(models.Usuario).filter(
+        models.Usuario.id == inspector_id,
+        models.Usuario.rol == models.RolEnum.inspector
+    ).first()
+    if not inspector:
+        raise HTTPException(status_code=404, detail="Inspector not found")
+    return inspector
+
+@router.get("/normales-y-veterinarios", response_model=list[schemas.UserListResponse])
+async def get_usuarios_normales_y_veterinarios(
+    current_user: Annotated[models.Usuario, Depends(auth.require_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get all normal users (ganaderos) and veterinarians.
+    Only administradores and superadministradores can access this endpoint.
+    
+    Returns a list of normal users and veterinarians with their basic info and personal data.
+    """
+    usuarios = db.query(models.Usuario).filter(
+        models.Usuario.rol.in_([models.RolEnum.usuario, models.RolEnum.veterinario])
+    ).all()
+    return usuarios
+
+@router.get("/users/{user_id}/completo", response_model=schemas.UserInfoCompleto)
+async def get_usuario_completo(
+    user_id: str,
+    current_user: Annotated[models.Usuario, Depends(auth.require_admin)],
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get complete information about a user including:
+    - Basic user data and personal info (DatosUsuario)
+    - All addresses (domicilios)
+    - All uploaded documents with their review status
+    - All registered cattle (bovinos)
+    - All registered farms/properties (predios)
+    
+    Only administradores and superadministradores can access this endpoint.
+    """
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario not found")
+    
+    # Return the full user object with all relationships loaded
+    return usuario

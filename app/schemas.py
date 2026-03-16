@@ -51,6 +51,21 @@ class VeterinarioCreate(UserCreate):
     cedula: str  # Professional license number
     # Cedula file (document) will be uploaded separately in the multipart form
 
+class AdministradorCreate(UserCreate):
+    # Inherits all UserCreate fields
+    # Administrador can be created by superadministrador
+    pass
+
+class SuperAdministradorCreate(UserBase):
+    # SuperAdministrador is only created from database
+    # Only requires CURP for creation (password and other fields are set manually in DB)
+    pass
+
+class InspectorCreate(UserCreate):
+    # Inherits all UserCreate fields
+    # Inspector can be created by administrador or superadministrador
+    pass
+
 class UserLogin(UserBase):
     contrasena: str
 
@@ -308,6 +323,64 @@ class PredioUpdate(PredioBase):
 class PredioResponse(PredioBase):
     id: UUID
     usuario_id: UUID
+
+    class Config:
+        from_attributes = True
+
+# DatosUsuario Schemas
+class DatosUsuarioResponse(BaseModel):
+    id: UUID
+    usuario_id: UUID
+    nombre: str
+    apellido_p: str
+    apellido_m: Optional[str] = None
+    sexo: Optional[SexoEnum] = None
+    fecha_nac: Optional[date] = None
+    clave_elector: Optional[str] = None
+    idmex: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+# BovinoListResponse - Simplified version for listings
+class BovinoListResponse(BaseModel):
+    id: UUID
+    arete_barcode: Optional[str] = None
+    arete_rfid: Optional[str] = None
+    nombre: Optional[str] = None
+    folio: Optional[str] = None
+    raza_dominante: Optional[str] = None
+    fecha_nac: Optional[date] = None
+    sexo: Optional[SexoEnum] = None
+    peso_actual: Optional[float] = None
+    status: str
+    predio_id: Optional[UUID] = None
+
+    class Config:
+        from_attributes = True
+
+# UserInfoCompleto - Complete user information with all related data
+class UserInfoCompleto(BaseModel):
+    id: UUID
+    curp: str
+    rol: str
+    created_at: datetime
+    datos: Optional[DatosUsuarioResponse] = None
+    domicilios: list[DomicilioResponse] = []
+    documentos: list[DocumentoResponse] = []
+    bovinos: list[BovinoListResponse] = []
+    predios: list[PredioResponse] = []
+
+    class Config:
+        from_attributes = True
+
+# UserListResponse - Simple user info for listing
+class UserListResponse(BaseModel):
+    id: UUID
+    curp: str
+    rol: str
+    created_at: datetime
+    datos: Optional[DatosUsuarioResponse] = None
 
     class Config:
         from_attributes = True

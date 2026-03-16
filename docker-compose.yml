@@ -9,10 +9,14 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - db
-      - localstack
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_started
     networks:
       - union_net
+    environment:
+      - PYTHONUNBUFFERED=1
 
   db:
     image: postgres:15
@@ -26,19 +30,75 @@ services:
       - "5432:5432"
     networks:
       - union_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   localstack:
-    image: localstack/localstack
+    image: localstack/localstack:latest
     container_name: union_ganadera_s3
     ports:
       - "4566:4566"
-    env_file:
-      - .env
+    environment:
+      - SERVICES=s3
+      - DEBUG=0
+      - PERSISTENCE=1
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - localstack_data:/var/lib/localstack
-      - ./init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - union_net
+    healthcheck:
+      test: ["CMD", "awslocal", "s3", "ls"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  init-s3:
+    image: localstack/localstack:latest
+    container_name: union_ganadera_init_s3
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    networks:
+      - union_net
+    entrypoint: |
+      /bin/bash -c "
+        echo 'Initializing S3 buckets...'
+        awslocal --endpoint-url=http://localstack:4566 s3 mb s3://documentos --region us-east-1 2>&1 || echo 'Bucket may already exist'
+        awslocal --endpoint-url=http://localstack:4566 s3api put-bucket-acl --bucket documentos --acl public-read 2>&1 || true
+        
+        echo 'Configuring CORS for documentos bucket...'
+        awslocal --endpoint-url=http://localstack:4566 s3api put-bucket-cors --bucket documentos --cors-configuration '{
+          \"CORSRules\": [
+            {
+              \"AllowedOrigins\": [\"*\"],
+              \"AllowedMethods\": [\"GET\", \"PUT\", \"POST\", \"DELETE\", \"HEAD\"],
+              \"AllowedHeaders\": [\"*\"],
+              \"ExposeHeaders\": [\"ETag\", \"x-amz-version-id\"],
+              \"MaxAgeSeconds\": 3600
+            }
+          ]
+        }' 2>&1 || echo 'CORS configuration failed'
+        
+        echo 'S3 initialization complete'
+      "
 
   pgadmin:
     image: dpage/pgadmin4
@@ -53,6 +113,9 @@ services:
       - union_net
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    environment:
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - SCRIPT_NAME=/pgadmin
 
 volumes:
   postgres_data:

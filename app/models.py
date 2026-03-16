@@ -14,7 +14,9 @@ class SexoEnum(str, enum.Enum):
 class RolEnum(str, enum.Enum):
     usuario = "usuario"
     veterinario = "veterinario"
-    admin = "admin"
+    administrador = "administrador"
+    superadministrador = "superadministrador"
+    inspector = "inspector"
     ban = "ban"
 
 class DocTypeEnum(str, enum.Enum):
@@ -69,7 +71,6 @@ class DatosUsuario(Base):
     apellido_m = Column(String)
     sexo = Column(Enum(SexoEnum))
     fecha_nac = Column(Date)
-    curp = Column(String, unique=True)
     clave_elector = Column(String)
     idmex = Column(String)
 
@@ -83,6 +84,37 @@ class Veterinario(Base):
     cedula = Column(String(50), unique=True, nullable=False)
 
     usuario = relationship("Usuario")
+
+class Administrador(Base):
+    __tablename__ = "administradores"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), unique=True, nullable=False)
+    creado_por_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    usuario = relationship("Usuario", foreign_keys=[usuario_id])
+    creado_por = relationship("Usuario", foreign_keys=[creado_por_id])
+
+class SuperAdministrador(Base):
+    __tablename__ = "superadministradores"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), unique=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    usuario = relationship("Usuario")
+
+class Inspector(Base):
+    __tablename__ = "inspectores"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), unique=True, nullable=False)
+    creado_por_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    usuario = relationship("Usuario", foreign_keys=[usuario_id])
+    creado_por = relationship("Usuario", foreign_keys=[creado_por_id])
 
 class Bovino(Base):
     __tablename__ = "bovinos"

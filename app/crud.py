@@ -125,6 +125,108 @@ def create_veterinario(db: Session, veterinario: schemas.VeterinarioCreate, cedu
 
     return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
 
+def create_administrador(db: Session, administrador: schemas.AdministradorCreate, created_by_user_id: str):
+    """
+    Create a new administrador user.
+    - User will have rol='administrador'
+    - Set created_by_user_id to track who created this admin
+    """
+    hashed_password = auth.get_password_hash(administrador.contrasena)
+
+    # Using the stored procedure registrar_usuario_nuevo with rol='administrador'
+    query = text("""
+        SELECT registrar_usuario_nuevo(
+            :curp,
+            :contrasena,
+            :rol,
+            :nombre,
+            :apellido_p,
+            :apellido_m,
+            :sexo,
+            :fecha_nac,
+            :clave_elector,
+            :idmex
+        )
+    """)
+
+    params = {
+        "curp": administrador.curp,
+        "contrasena": hashed_password,
+        "rol": "administrador",
+        "nombre": administrador.nombre,
+        "apellido_p": administrador.apellido_p,
+        "apellido_m": administrador.apellido_m,
+        "sexo": administrador.sexo.value,
+        "fecha_nac": administrador.fecha_nac,
+        "clave_elector": administrador.clave_elector,
+        "idmex": administrador.idmex
+    }
+
+    result = db.execute(query, params)
+    new_user_id = result.scalar()
+    db.commit()
+
+    # Save to administradores table
+    admin_query = text("""
+        INSERT INTO administradores (usuario_id, creado_por_id)
+        VALUES (:usuario_id, :creado_por_id)
+    """)
+    db.execute(admin_query, {"usuario_id": new_user_id, "creado_por_id": created_by_user_id})
+    db.commit()
+
+    return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
+
+def create_inspector(db: Session, inspector: schemas.InspectorCreate, created_by_user_id: str):
+    """
+    Create a new inspector user.
+    - User will have rol='inspector'
+    - Set created_by_user_id to track who created this inspector
+    """
+    hashed_password = auth.get_password_hash(inspector.contrasena)
+
+    # Using the stored procedure registrar_usuario_nuevo with rol='inspector'
+    query = text("""
+        SELECT registrar_usuario_nuevo(
+            :curp,
+            :contrasena,
+            :rol,
+            :nombre,
+            :apellido_p,
+            :apellido_m,
+            :sexo,
+            :fecha_nac,
+            :clave_elector,
+            :idmex
+        )
+    """)
+
+    params = {
+        "curp": inspector.curp,
+        "contrasena": hashed_password,
+        "rol": "inspector",
+        "nombre": inspector.nombre,
+        "apellido_p": inspector.apellido_p,
+        "apellido_m": inspector.apellido_m,
+        "sexo": inspector.sexo.value,
+        "fecha_nac": inspector.fecha_nac,
+        "clave_elector": inspector.clave_elector,
+        "idmex": inspector.idmex
+    }
+
+    result = db.execute(query, params)
+    new_user_id = result.scalar()
+    db.commit()
+
+    # Save to inspectores table
+    inspector_query = text("""
+        INSERT INTO inspectores (usuario_id, creado_por_id)
+        VALUES (:usuario_id, :creado_por_id)
+    """)
+    db.execute(inspector_query, {"usuario_id": new_user_id, "creado_por_id": created_by_user_id})
+    db.commit()
+
+    return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
+
 def get_bovinos(db: Session, user_id: str, skip: int = 0, limit: int = 100, predio_id: str = None):
     query = db.query(models.Bovino).filter(models.Bovino.usuario_id == user_id)
     if predio_id:

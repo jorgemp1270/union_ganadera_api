@@ -53,9 +53,17 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 def require_admin(current_user: models.Usuario = Depends(get_current_user)):
-    if current_user.rol != models.RolEnum.admin:
+    if current_user.rol not in [models.RolEnum.administrador, models.RolEnum.superadministrador]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
+        )
+    return current_user
+
+def require_super_admin(current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != models.RolEnum.superadministrador:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin access required"
         )
     return current_user
