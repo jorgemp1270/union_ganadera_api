@@ -115,7 +115,6 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     environment:
       - PGADMIN_CONFIG_SERVER_MODE=False
-      - SCRIPT_NAME=/pgadmin
 
 volumes:
   postgres_data:
