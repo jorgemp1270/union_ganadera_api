@@ -13,8 +13,12 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Union Ganadera API")
 
 # Configure CORS for development and production
-# Allow Flutter (mobile), Angular (web), and other frontend clients
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:4200,http://localhost:8080,http://localhost:8081").split(",")
+# Development: Allow all origins. Production: Use CORS_ORIGINS env var with specific origins
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if cors_origins_env:
+    cors_origins = cors_origins_env.split(",")
+else:
+    cors_origins = ["*"]  # Development mode: allow all origins
 
 app.add_middleware(
     CORSMiddleware,
