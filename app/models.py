@@ -43,6 +43,14 @@ class FacilityTypeEnum(str, enum.Enum):
     QUARANTINE_CENTER = "QUARANTINE_CENTER"
     CASETA_INSPECCION = "CASETA_INSPECCION"
 
+class InstalacionStatusEnum(str, enum.Enum):
+    pendiente_revision = "pendiente_revision"
+    documentos_incompletos = "documentos_incompletos"
+    documentos_rechazados = "documentos_rechazados"
+    lista_operar = "lista_operar"
+    activa = "activa"
+    inactiva = "inactiva"
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -310,14 +318,14 @@ class Instalacion(Base):
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
     nombre = Column(String(150), nullable=False)
     facility_type = Column(Enum(FacilityTypeEnum), nullable=False)
-    status = Column(String(20), default="activa")
+    status = Column(Enum(InstalacionStatusEnum), default=InstalacionStatusEnum.pendiente_revision)
     latitud = Column(Numeric(9, 6))
     longitud = Column(Numeric(9, 6))
     estado = Column(String(50), nullable=False)
     municipio = Column(String(50), nullable=False)
     created_by_admin = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     license_number = Column(String(50), unique=True, nullable=False)
-    active = Column(Boolean, default=True)
+    active = Column(Boolean, default=False)  # Only True when status = "activa" and approved by admin
     fecha_vencimiento = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

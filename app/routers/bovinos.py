@@ -129,7 +129,7 @@ async def create_bovino(bovino: schemas.BovinoCreate,
     Create a new bovino.
     If instalacion_id is provided, validates:
     - Instalacion exists and belongs to user
-    - Instalacion is active (active = True)
+    - Instalacion is approved (status = 'activa' AND active = True)
     - Instalacion is not expired (fecha_vencimiento > today or null for non-UPP/PSG)
     """
     if bovino.instalacion_id:
@@ -141,11 +141,11 @@ async def create_bovino(bovino: schemas.BovinoCreate,
         if db_instalacion.usuario_id != current_user.id and current_user.rol not in ["administrador", "superadministrador", "inspector"]:
             raise HTTPException(status_code=403, detail="Not authorized to use this instalacion")
         
-        # Validate instalacion is active
-        if not db_instalacion.active:
+        # Validate instalacion is active and approved
+        if db_instalacion.status != models.InstalacionStatusEnum.activa or not db_instalacion.active:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot create bovino: Instalacion is not active"
+                detail="Cannot create bovino: Instalacion is not active or not approved by admin"
             )
         
         # Validate instalacion is not expired (for UPP/PSG types)

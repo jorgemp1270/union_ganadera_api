@@ -6,7 +6,7 @@ from uuid import UUID
 import uuid
 
 from ..database import get_db
-from ..models import Instalacion, Predio, Usuario, InstalacionDocumento, RenovacionUPP, Documento, FacilityTypeEnum, DocReviewStatusEnum, InstalacionPredio
+from ..models import Instalacion, Predio, Usuario, InstalacionDocumento, RenovacionUPP, Documento, FacilityTypeEnum, DocReviewStatusEnum, InstalacionPredio, InstalacionStatusEnum
 from ..auth import get_current_user, require_admin
 from ..schemas import (
     InstalacionCreate,
@@ -16,6 +16,12 @@ from ..schemas import (
     InstalacionDocumentoResponse,
     RenovacionUPPCreate,
     RenovacionUPPResponse,
+    VincularPredioInstalacionRequest,
+    VincularPredioInstalacionResponse,
+    ValidacionDocumentosResponse,
+    ApproveInstalacionRequest,
+    ApproveInstalacionResponse,
+    DocumentoStatusResponse,
 )
 
 router = APIRouter(prefix="/instalaciones", tags=["instalaciones"])
@@ -63,14 +69,14 @@ def crear_instalacion(
         usuario_id=request.usuario_id or current_user.id,
         nombre=request.nombre,
         facility_type=request.facility_type,
-        status=request.status or "activa",
+        status=request.status or InstalacionStatusEnum.pendiente_revision,
         latitud=request.latitud,
         longitud=request.longitud,
         estado=request.estado,
         municipio=request.municipio,
         created_by_admin=current_user.id if current_user.rol in ["administrador", "superadministrador"] else None,
         license_number=request.license_number,
-        active=request.active or True,
+        active=False,  # Only set to True when admin approves and all docs are validated
         fecha_vencimiento=None,  # Will be set when UPP renewal is approved
     )
     
@@ -583,3 +589,256 @@ def buscar_por_codigo(
         )
     
     return instalacion
+
+
+# PREDIO LINKING - Link a property (predio) to a facility
+@router.post("/{instalacion_id}/vincular-predio", response_model=VincularPredioInstalacionResponse, status_code=status.HTTP_201_CREATED)
+def vincular_predio_a_instalacion(
+    instalacion_id: UUID,
+    request: VincularPredioInstalacionRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Link a property (predio) to a facility (instalacion).
+    - User must own both predio and instalacion
+    - Creates a many-to-many relationship via instalacion_predio
+    - Shares ownership: facility inherits property's clave_catastral for validation
+    """
+    
+    # Get instalacion
+    instalacion = db.query(Instalacion).filter(Instalacion.id == instalacion_id).first()
+    if not instalacion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Instalación not found"
+        )
+    
+    # Check authorization (owner or admin)
+    if current_user.rol not in ["administrador", "superadministrador", "inspector"] and instalacion.usuario_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to link properties to this facility"
+        )
+    
+    # Get predio
+    predio = db.query(Predio).filter(Predio.id == request.predio_id).first()
+    if not predio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Predio not found"
+        )
+    
+    # Check predio ownership
+    if predio.usuario_id != instalacion.usuario_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Predio must be owned by the same user as the facility"
+        )
+    
+    # Check if already linked
+    existing_link = db.query(InstalacionPredio).filter(
+        and_(
+            InstalacionPredio.upp_id == instalacion_id,
+            InstalacionPredio.predio_id == request.predio_id
+        )
+    ).first()
+    if existing_link:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This property is already linked to this facility"
+        )
+    
+    # Create link
+    link = InstalacionPredio(
+        upp_id=instalacion_id,
+        predio_id=request.predio_id
+    )
+    
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    
+    return link
+
+
+# VALIDATION - Check document completeness for a facility
+@router.get("/{instalacion_id}/validar-documentos", response_model=ValidacionDocumentosResponse)
+def validar_documentos_instalacion(
+    instalacion_id: UUID,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Validate if all required documents for a facility are present and approved.
+    Returns:
+    - Total documents uploaded
+    - Aprobados/Pendientes/Rechazados counts
+    - List of missing required documents
+    - Recommended status change
+    """
+    
+    instalacion = db.query(Instalacion).filter(Instalacion.id == instalacion_id).first()
+    if not instalacion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Instalación not found"
+        )
+    
+    # Check authorization
+    if current_user.rol not in ["administrador", "superadministrador", "inspector"] and instalacion.usuario_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized"
+        )
+    
+    # Get all documents for this facility
+    documentos = db.query(InstalacionDocumento).filter(
+        InstalacionDocumento.instalacion_id == instalacion_id
+    ).all()
+    
+    # Define required documents based on facility type
+    documentos_requeridos = {
+        FacilityTypeEnum.UPP: {
+            "clave_catastral": "Clave Catastral del terreno",
+            "constancia_fiscal": "Constancia de Situación Fiscal",
+            "certificado_parcelario": "Certificado Parcelario (si aplica)",
+        },
+        FacilityTypeEnum.PSG: {
+            "constancia_fiscal": "Constancia de Situación Fiscal",
+            "registro_veterinario": "Registro/Cédula Veterinario",
+        },
+        FacilityTypeEnum.RASTRO: {
+            "permiso_ambiental": "Permiso Ambiental",
+            "constancia_fiscal": "Constancia de Situación Fiscal",
+        },
+    }
+    
+    requeridos = documentos_requeridos.get(instalacion.facility_type, {})
+    
+    # Count status
+    docs_aprobados = sum(1 for d in documentos if d.status == DocReviewStatusEnum.aprobado)
+    docs_pendientes = sum(1 for d in documentos if d.status == DocReviewStatusEnum.pendiente)
+    docs_rechazados = sum(1 for d in documentos if d.status == DocReviewStatusEnum.rechazado)
+    
+    # Find missing documents
+    doc_tipos_presentes = {d.documento_tipo for d in documentos}
+    documentos_faltantes = [
+        DocumentoStatusResponse(
+            documento_tipo=tipo,
+            status=DocReviewStatusEnum.pendiente,
+            requerido=True,
+            descripcion=desc
+        )
+        for tipo, desc in requeridos.items()
+        if tipo not in doc_tipos_presentes
+    ]
+    
+    # Determine completeness and recommended status
+    validacion_completa = len(documentos_faltantes) == 0 and docs_rechazados == 0 and docs_pendientes == 0
+    
+    if validacion_completa:
+        status_recomendado = InstalacionStatusEnum.lista_operar
+    elif docs_rechazados > 0:
+        status_recomendado = InstalacionStatusEnum.documentos_rechazados
+    elif docs_pendientes > 0 or len(documentos_faltantes) > 0:
+        status_recomendado = InstalacionStatusEnum.documentos_incompletos
+    else:
+        status_recomendado = InstalacionStatusEnum.pendiente_revision
+    
+    return ValidacionDocumentosResponse(
+        instalacion_id=instalacion_id,
+        documentos_totales=len(documentos),
+        documentos_aprobados=docs_aprobados,
+        documentos_pendientes=docs_pendientes,
+        documentos_rechazados=docs_rechazados,
+        documentos_faltantes=documentos_faltantes,
+        validacion_completa=validacion_completa,
+        status_recomendado=status_recomendado,
+    )
+
+
+# APPROVAL - Admin approves facility and makes it operational
+@router.post("/{instalacion_id}/aprobar-operacion", response_model=ApproveInstalacionResponse)
+def aprobar_operacion_instalacion(
+    instalacion_id: UUID,
+    request: ApproveInstalacionRequest,
+    current_user: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    ADMIN ONLY: Approve facility operation.
+    Prerequisites:
+    - All required documents must be approved
+    - No rejected documents
+    - Facility must be in "lista_operar" status
+    
+    After approval:
+    - status = "activa"
+    - active = True
+    - Facility can now perform cattle movements and events
+    """
+    
+    instalacion = db.query(Instalacion).filter(Instalacion.id == instalacion_id).first()
+    if not instalacion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Instalación not found"
+        )
+    
+    # Get all documents
+    documentos = db.query(InstalacionDocumento).filter(
+        InstalacionDocumento.instalacion_id == instalacion_id
+    ).all()
+    
+    # Check if all documents are approved
+    tiene_pendientes = any(d.status == DocReviewStatusEnum.pendiente for d in documentos)
+    tiene_rechazados = any(d.status == DocReviewStatusEnum.rechazado for d in documentos)
+    
+    if tiene_pendientes or tiene_rechazados:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot approve: pending or rejected documents exist. Solve them first."
+        )
+    
+    # Validate using the validation endpoint logic
+    # Get facility type required documents
+    documentos_requeridos = {
+        FacilityTypeEnum.UPP: ["clave_catastral", "constancia_fiscal"],
+        FacilityTypeEnum.PSG: ["constancia_fiscal"],
+        FacilityTypeEnum.RASTRO: ["permiso_ambiental", "constancia_fiscal"],
+    }
+    
+    requeridos = documentos_requeridos.get(instalacion.facility_type, [])
+    doc_tipos_presentes = {d.documento_tipo for d in documentos}
+    
+    # Check all required documents exist and are approved
+    for tipo_requerido in requeridos:
+        if tipo_requerido not in doc_tipos_presentes:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot approve: required document '{tipo_requerido}' is missing"
+            )
+        
+        doc = next(d for d in documentos if d.documento_tipo == tipo_requerido)
+        if doc.status != DocReviewStatusEnum.aprobado:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot approve: required document '{tipo_requerido}' is not approved"
+            )
+    
+    # Approve the facility
+    instalacion.status = InstalacionStatusEnum.activa
+    instalacion.active = True
+    instalacion.created_by_admin = current_user.id
+    
+    db.commit()
+    db.refresh(instalacion)
+    
+    return ApproveInstalacionResponse(
+        id=instalacion.id,
+        status=instalacion.status,
+        active=instalacion.active,
+        mensaje="Instalación approved and operational. Cattle movements allowed.",
+        fecha_aprobacion=datetime.utcnow(),
+    )

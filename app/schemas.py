@@ -23,6 +23,14 @@ class DocReviewStatusEnum(str, Enum):
     aprobado = "aprobado"
     rechazado = "rechazado"
 
+class InstalacionStatusEnum(str, Enum):
+    pendiente_revision = "pendiente_revision"
+    documentos_incompletos = "documentos_incompletos"
+    documentos_rechazados = "documentos_rechazados"
+    lista_operar = "lista_operar"
+    activa = "activa"
+    inactiva = "inactiva"
+
 # User Schemas
 class UserBase(BaseModel):
     curp: str
@@ -400,17 +408,17 @@ class InstalacionCreate(BaseModel):
     usuario_id: Optional[UUID] = None
     nombre: str
     facility_type: str
-    status: Optional[str] = "activa"
+    status: Optional[InstalacionStatusEnum] = InstalacionStatusEnum.pendiente_revision
     latitud: Optional[float] = None
     longitud: Optional[float] = None
     estado: str
     municipio: str
     license_number: str
-    active: Optional[bool] = True
+    active: Optional[bool] = False
 
 class InstalacionUpdate(BaseModel):
     nombre: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[InstalacionStatusEnum] = None
     latitud: Optional[float] = None
     longitud: Optional[float] = None
     estado: Optional[str] = None
@@ -422,7 +430,7 @@ class InstalacionResponse(BaseModel):
     usuario_id: UUID
     nombre: str
     facility_type: str
-    status: str
+    status: InstalacionStatusEnum
     latitud: Optional[float] = None
     longitud: Optional[float] = None
     estado: str
@@ -439,7 +447,7 @@ class InstalacionDocumentoResponse(BaseModel):
     instalacion_id: UUID
     documento_id: UUID
     documento_tipo: str
-    status: str
+    status: DocReviewStatusEnum
     comentario_rechazo: Optional[str] = None
     review_date: Optional[datetime] = None
     reviewed_by: Optional[UUID] = None
@@ -465,6 +473,49 @@ class RenovacionUPPResponse(BaseModel):
     aprobada_por: Optional[UUID] = None
     fecha_aprobacion: Optional[datetime] = None
     comentarios: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+# Instalacion - Predio Linking
+class VincularPredioInstalacionRequest(BaseModel):
+    predio_id: UUID
+
+class VincularPredioInstalacionResponse(BaseModel):
+    upp_id: UUID
+    predio_id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Validacion de documentos
+class DocumentoStatusResponse(BaseModel):
+    documento_tipo: str
+    status: DocReviewStatusEnum
+    requerido: bool
+    descripcion: str
+
+class ValidacionDocumentosResponse(BaseModel):
+    instalacion_id: UUID
+    documentos_totales: int
+    documentos_aprobados: int
+    documentos_pendientes: int
+    documentos_rechazados: int
+    documentos_faltantes: list[DocumentoStatusResponse]
+    validacion_completa: bool
+    status_recomendado: InstalacionStatusEnum
+
+# Aprobacion de instalacion
+class ApproveInstalacionRequest(BaseModel):
+    comentarios: Optional[str] = None
+
+class ApproveInstalacionResponse(BaseModel):
+    id: UUID
+    status: InstalacionStatusEnum
+    active: bool
+    mensaje: str
+    fecha_aprobacion: datetime
 
     class Config:
         from_attributes = True
