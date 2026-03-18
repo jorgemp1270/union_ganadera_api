@@ -18,6 +18,19 @@ async def read_predios(skip: int = 0, limit: int = 100,
                        db: Session = Depends(database.get_db)):
     return crud.get_predios(db, skip=skip, limit=limit, usuario_id=str(current_user.id))
 
+@router.get("/todos", response_model=List[schemas.PredioResponse])
+async def read_todos_predios(skip: int = 0, limit: int = 100,
+                             current_user: models.Usuario = Depends(auth.get_current_user),
+                             db: Session = Depends(database.get_db)):
+    """Get ALL predios (admin only). Returns all properties in the system with user information."""
+    # Check if user is admin
+    if current_user.rol not in ["administrador", "superadministrador"]:
+        raise HTTPException(status_code=403, detail="Only admins can view all predios")
+    
+    # Get all predios without filtering by user
+    all_predios = db.query(models.Predio).offset(skip).limit(limit).all()
+    return all_predios
+
 @router.get("/{predio_id}", response_model=schemas.PredioResponse)
 async def read_predio(predio_id: str,
                       current_user: models.Usuario = Depends(auth.get_current_user),
@@ -71,6 +84,31 @@ async def get_bovinos_by_predio(
     if db_predio.usuario_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view bovinos for this predio")
     return crud.get_bovinos_by_predio(db, predio_id=predio_id, skip=skip, limit=limit)
+
+@router.get("/{predio_id}/instalaciones", response_model=List[schemas.InstalacionResponse])
+async def get_instalaciones_by_predio(
+    predio_id: str,
+    current_user: models.Usuario = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get all instalaciones linked to a specific predio"""
+    db_predio = crud.get_predio(db, predio_id=predio_id)
+    if db_predio is None:
+        raise HTTPException(status_code=404, detail="Predio not found")
+    if db_predio.usuario_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view instalaciones for this predio")
+    
+    # Query the many-to-many relationship through InstalacionPredio junction table
+    from sqlalchemy import and_
+    instalaciones = db.query(models.Instalacion).join(
+        models.InstalacionPredio,
+        and_(
+            models.InstalacionPredio.upp_id == models.Instalacion.id,
+            models.InstalacionPredio.predio_id == predio_id
+        )
+    ).all()
+    
+    return instalaciones
 
 @router.post("/{predio_id}/upload-document", response_model=schemas.DocumentoResponse)
 async def upload_predio_document(

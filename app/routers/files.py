@@ -145,9 +145,16 @@ async def upload_file(
 ):
     """Upload a document file for the current user."""
     try:
-        # Replace existing document of the same type if one already exists
-        # fierro is the only type that allows multiple uploads per user
-        if doc_type != schemas.DocTypeEnum.fierro:
+        # Reemplazar doc_type solo si es explícitamente único por usuario
+        unique_user_doc_types = [
+            schemas.DocTypeEnum.identificacion_frente,
+            schemas.DocTypeEnum.identificacion_reverso,
+            schemas.DocTypeEnum.comprobante_domicilio,
+            schemas.DocTypeEnum.predio,
+            schemas.DocTypeEnum.cedula_veterinario
+        ]
+        
+        if doc_type in unique_user_doc_types:
             existing = crud.get_documento_by_user_and_type(db, user_id=str(current_user.id), doc_type=doc_type)
             if existing:
                 try:

@@ -138,13 +138,50 @@ def obtener_instalacion(
         )
     
     # Check access (user or admin)
-    if current_user.rol not in ["admin", "superadmin", "inspector"] and instalacion.usuario_id != current_user.id:
+    if current_user.rol not in ["administrador", "superadministrador", "inspector"] and instalacion.usuario_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this facility"
         )
     
-    return instalacion
+    # Enrich predios with complete information
+    predios_vinculados = db.query(InstalacionPredio).filter(
+        InstalacionPredio.upp_id == instalacion_id
+    ).all()
+    
+    predios_completos = []
+    for vinc in predios_vinculados:
+        predio = db.query(Predio).filter(Predio.id == vinc.predio_id).first()
+        if predio:
+            predios_completos.append({
+                "id": predio.id,
+                "usuario_id": predio.usuario_id,
+                "clave_catastral": predio.clave_catastral,
+                "superficie_total": predio.superficie_total,
+                "latitud": predio.latitud,
+                "longitud": predio.longitud,
+                "linked_at": vinc.created_at,
+            })
+    
+    # Create response object with enriched predios
+    response_data = {
+        "id": instalacion.id,
+        "usuario_id": instalacion.usuario_id,
+        "nombre": instalacion.nombre,
+        "facility_type": instalacion.facility_type,
+        "status": instalacion.status,
+        "latitud": instalacion.latitud,
+        "longitud": instalacion.longitud,
+        "estado": instalacion.estado,
+        "municipio": instalacion.municipio,
+        "license_number": instalacion.license_number,
+        "active": instalacion.active,
+        "created_at": instalacion.created_at,
+        "documentos": instalacion.documentos or [],
+        "predios": predios_completos,
+    }
+    
+    return response_data
 
 
 # UPDATE - Update facility info
@@ -165,7 +202,7 @@ def actualizar_instalacion(
         )
     
     # Check authorization
-    if current_user.rol not in ["admin", "superadmin"] and instalacion.usuario_id != current_user.id:
+    if current_user.rol not in ["administrador", "superadministrador"] and instalacion.usuario_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this facility"
@@ -234,7 +271,7 @@ def vincular_documento_instalacion(
             detail="Instalación not found"
         )
     
-    if current_user.rol not in ["admin", "superadmin"] and instalacion.usuario_id != current_user.id:
+    if current_user.rol not in ["administrador", "superadministrador"] and instalacion.usuario_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized"
@@ -297,7 +334,7 @@ def obtener_documentos_instalacion(
             detail="Instalación not found"
         )
     
-    if current_user.rol not in ["admin", "superadmin", "inspector"] and instalacion.usuario_id != current_user.id:
+    if current_user.rol not in ["administrador", "superadministrador", "inspector"] and instalacion.usuario_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized"
@@ -413,7 +450,7 @@ def solicitar_renovacion_upp(
         )
     
     # Check authorization
-    if current_user.id != instalacion.usuario_id and current_user.rol not in ["admin", "superadmin"]:
+    if current_user.id != instalacion.usuario_id and current_user.rol not in ["administrador", "superadministrador"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized"

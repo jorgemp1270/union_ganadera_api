@@ -17,6 +17,19 @@ class DocTypeEnum(str, Enum):
     cedula_veterinario = "cedula_veterinario"
     fierro = "fierro"
     otro = "otro"
+    clave_catastral = "clave_catastral"
+    constancia_fiscal = "constancia_fiscal"
+    certificado_parcelario = "certificado_parcelario"
+    identificacion = "identificacion"
+    rfc = "rfc"
+    permiso_rastro = "permiso_rastro"
+    certificado_inspecciones = "certificado_inspecciones"
+    permiso_feria = "permiso_feria"
+    permiso_subasta = "permiso_subasta"
+    permiso_exportacion = "permiso_exportacion"
+    certificado_calidad = "certificado_calidad"
+    permiso_cuarentena = "permiso_cuarentena"
+    permiso_laboratorio = "permiso_laboratorio"
 
 class DocReviewStatusEnum(str, Enum):
     pendiente = "pendiente"
@@ -456,9 +469,36 @@ class InstalacionDocumentoResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Instalacion - Predio Linking (DEFINIR ANTES DE InstalacionDetailResponse)
+class VincularPredioInstalacionRequest(BaseModel):
+    predio_id: UUID
+
+class VincularPredioInstalacionResponse(BaseModel):
+    upp_id: UUID
+    predio_id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PredioInstalacionEnriquecida(BaseModel):
+    """Predio vinculado a una instalación con información completa del predio"""
+    id: UUID
+    usuario_id: UUID
+    nombre: Optional[str] = None
+    municipio: Optional[str] = None
+    clave_catastral: Optional[str] = None
+    superficie_total: Optional[float] = None
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
+    linked_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class InstalacionDetailResponse(InstalacionResponse):
     documentos: list[InstalacionDocumentoResponse] = []
-    predios: list[PredioResponse] = []
+    predios: list[PredioInstalacionEnriquecida] = []
 
 class RenovacionUPPCreate(BaseModel):
     comentarios: Optional[str] = None
@@ -473,18 +513,6 @@ class RenovacionUPPResponse(BaseModel):
     aprobada_por: Optional[UUID] = None
     fecha_aprobacion: Optional[datetime] = None
     comentarios: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-# Instalacion - Predio Linking
-class VincularPredioInstalacionRequest(BaseModel):
-    predio_id: UUID
-
-class VincularPredioInstalacionResponse(BaseModel):
-    upp_id: UUID
-    predio_id: UUID
-    created_at: datetime
 
     class Config:
         from_attributes = True

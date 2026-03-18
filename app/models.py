@@ -27,6 +27,19 @@ class DocTypeEnum(str, enum.Enum):
     cedula_veterinario = "cedula_veterinario"
     fierro = "fierro"
     otro = "otro"
+    clave_catastral = "clave_catastral"
+    constancia_fiscal = "constancia_fiscal"
+    certificado_parcelario = "certificado_parcelario"
+    identificacion = "identificacion"
+    rfc = "rfc"
+    permiso_rastro = "permiso_rastro"
+    certificado_inspecciones = "certificado_inspecciones"
+    permiso_feria = "permiso_feria"
+    permiso_subasta = "permiso_subasta"
+    permiso_exportacion = "permiso_exportacion"
+    certificado_calidad = "certificado_calidad"
+    permiso_cuarentena = "permiso_cuarentena"
+    permiso_laboratorio = "permiso_laboratorio"
 
 class DocReviewStatusEnum(str, enum.Enum):
     pendiente = "pendiente"
@@ -342,6 +355,7 @@ class InstalacionPredio(Base):
 
     upp_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id", ondelete="CASCADE"), primary_key=True, nullable=False)
     predio_id = Column(UUID(as_uuid=True), ForeignKey("predios.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     instalacion = relationship("Instalacion", back_populates="predios")
     predio = relationship("Predio", back_populates="instalaciones")
