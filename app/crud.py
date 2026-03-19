@@ -227,11 +227,36 @@ def create_inspector(db: Session, inspector: schemas.InspectorCreate, created_by
 
     return db.query(models.Usuario).filter(models.Usuario.id == new_user_id).first()
 
-def get_bovinos(db: Session, user_id: str, skip: int = 0, limit: int = 100, instalacion_id: str = None):
-    query = db.query(models.Bovino).filter(models.Bovino.usuario_id == user_id)
+def get_bovinos(db: Session, user_id: str = None, skip: int = 0, limit: int = 100, 
+                instalacion_id: str = None, owner_curp: str = None, status: str = None,
+                search_term: str = None):
+    from sqlalchemy.orm import joinedload
+    query = db.query(models.Bovino).options(joinedload(models.Bovino.instalacion))
+    
+    if user_id:
+        query = query.filter(models.Bovino.usuario_id == user_id)
+    
+    if owner_curp:
+        # Join with User to filter by CURP
+        query = query.join(models.Usuario, models.Bovino.usuario_id == models.Usuario.id).filter(models.Usuario.curp == owner_curp)
+        
+    if status:
+        query = query.filter(models.Bovino.status == status)
+        
+    if search_term:
+        from sqlalchemy import or_
+        # Use coalesce to treat NULL as empty string for ilike
+        st = f"%{search_term}%"
+        query = query.filter(or_(
+            func.coalesce(models.Bovino.arete_barcode, '').ilike(st),
+            func.coalesce(models.Bovino.arete_rfid, '').ilike(st),
+            func.coalesce(models.Bovino.folio, '').ilike(st)
+        ))
+
     if instalacion_id:
         query = query.filter(models.Bovino.instalacion_id == instalacion_id)
-    return query.offset(skip).limit(limit).all()
+        
+    return query.order_by(models.Bovino.folio.asc()).offset(skip).limit(limit).all()
 
 def get_bovinos_by_instalacion(db: Session, instalacion_id: str, skip: int = 0, limit: int = 100):
     return db.query(models.Bovino).filter(models.Bovino.instalacion_id == instalacion_id).offset(skip).limit(limit).all()
@@ -253,7 +278,12 @@ def search_bovino(db: Session, arete_barcode: str = None, arete_rfid: str = None
     return None
 
 def get_bovino(db: Session, bovino_id: str):
-    return db.query(models.Bovino).filter(models.Bovino.id == bovino_id).first()
+    from sqlalchemy.orm import joinedload
+    return db.query(models.Bovino).options(
+        joinedload(models.Bovino.instalacion),
+        joinedload(models.Bovino.madre),
+        joinedload(models.Bovino.padre)
+    ).filter(models.Bovino.id == bovino_id).first()
 
 _FOLIO_ALPHABET = string.ascii_uppercase + string.digits
 
@@ -335,19 +365,16 @@ def create_evento(db: Session, evento_request: schemas.EventoCreateRequest):
         }).scalar()
 
     elif etype == 'compraventa':
-        # registrar_compraventa(_bovino_id, _comprador_curp, _vendedor_curp, _fecha, _observaciones)
-        q = text("SELECT registrar_compraventa(:bid, :cid, :vid, NOW(), :obs)")
-        eid = db.execute(q, {
-            "bid": bovino_id, "cid": data.get('comprador_curp'),
-            "vid": data.get('vendedor_curp'), "obs": observaciones
-        }).scalar()
+        raise HTTPException(
+            status_code=400, 
+            detail="El registro directo de compraventa ha sido deshabilitado. Debe usar el flujo de Movilizaciones (REEMO)."
+        )
 
     elif etype == 'traslado':
-        # registrar_traslado(_bovino_id, _predio_nuevo_id, _fecha, _observaciones)
-        q = text("SELECT registrar_traslado(:bid, :pid, NOW(), :obs)")
-        eid = db.execute(q, {
-            "bid": bovino_id, "pid": data.get('predio_nuevo_id'), "obs": observaciones
-        }).scalar()
+        raise HTTPException(
+            status_code=400, 
+            detail="El registro directo de traslado ha sido deshabilitado. Debe usar el flujo de Movilizaciones (REEMO)."
+        )
 
     elif etype == 'enfermedad':
         # registrar_enfermedad(_bovino_id, _usuario_id, _tipo, _fecha, _observaciones)
@@ -417,7 +444,135 @@ def get_evento(db: Session, evento_id: str):
     return db.query(models.Evento).filter(models.Evento.id == evento_id).first()
 
 def get_eventos_by_bovino(db: Session, bovino_id: str, skip: int = 0, limit: int = 100):
-    return db.query(models.Evento).filter(models.Evento.bovino_id == bovino_id).offset(skip).limit(limit).all()
+    return db.query(models.Evento).filter(models.Evento.bovino_id == bovino_id).order_by(models.Evento.fecha.desc()).offset(skip).limit(limit).all()
+
+def get_bovino_full_history(db: Session, bovino_id: str):
+    """
+    Get all events for a bovino, including specific details for each event type.
+    """
+    eventos = db.query(models.Evento).filter(models.Evento.bovino_id == bovino_id).order_by(models.Evento.fecha.desc()).all()
+    
+    history = []
+    for e in eventos:
+        item = {
+            "id": e.id,
+            "fecha": e.fecha,
+            "observaciones": e.observaciones,
+            "tipo": "general",
+            "detalles": {}
+        }
+        
+        # Check for specific details in each table
+        peso = db.query(models.Peso).filter(models.Peso.evento_id == e.id).first()
+        if peso:
+            item["tipo"] = "peso"
+            item["detalles"] = {"peso_actual": peso.peso_actual, "peso_nuevo": peso.peso_nuevo}
+            history.append(item)
+            continue
+            
+        dieta = db.query(models.Dieta).filter(models.Dieta.evento_id == e.id).first()
+        if dieta:
+            item["tipo"] = "dieta"
+            item["detalles"] = {"alimento": dieta.alimento}
+            history.append(item)
+            continue
+            
+        vacuna = db.query(models.Vacunacion).filter(models.Vacunacion.evento_id == e.id).first()
+        if vacuna:
+            item["tipo"] = "vacunacion"
+            item["detalles"] = {
+                "tipo_vacuna": vacuna.tipo, 
+                "lote": vacuna.lote, 
+                "laboratorio": vacuna.laboratorio, 
+                "fecha_prox": vacuna.fecha_prox,
+                "veterinario_id": vacuna.veterinario_id
+            }
+            history.append(item)
+            continue
+            
+        desp = db.query(models.Desparasitacion).filter(models.Desparasitacion.evento_id == e.id).first()
+        if desp:
+            item["tipo"] = "desparasitacion"
+            item["detalles"] = {
+                "medicamento": desp.medicamento, 
+                "dosis": desp.dosis_admin, 
+                "fecha_prox": desp.fecha_prox,
+                "veterinario_id": desp.veterinario_id
+            }
+            history.append(item)
+            continue
+            
+        lab = db.query(models.Laboratorio).filter(models.Laboratorio.evento_id == e.id).first()
+        if lab:
+            item["tipo"] = "laboratorio"
+            item["detalles"] = {
+                "tipo_prueba": lab.tipo, 
+                "resultado": lab.resultado,
+                "veterinario_id": lab.veterinario_id
+            }
+            history.append(item)
+            continue
+            
+        env = db.query(models.Enfermedad).filter(models.Enfermedad.evento_id == e.id).first()
+        if env:
+            item["tipo"] = "enfermedad"
+            item["detalles"] = {"tipo_enfermedad": env.tipo, "veterinario_id": env.veterinario_id}
+            # Look for related treatments
+            trats = db.query(models.Tratamiento).filter(models.Tratamiento.enfermedad_id == env.id).all()
+            if trats:
+                 item["detalles"]["tratamientos"] = [
+                     {"medicamento": t.medicamento, "dosis": t.dosis, "periodo": t.periodo} for t in trats
+                 ]
+            history.append(item)
+            continue
+            
+        trat = db.query(models.Tratamiento).filter(models.Tratamiento.evento_id == e.id).first()
+        if trat:
+            item["tipo"] = "tratamiento"
+            item["detalles"] = {
+                "medicamento": trat.medicamento, 
+                "dosis": trat.dosis, 
+                "periodo": trat.periodo,
+                "veterinario_id": trat.veterinario_id
+            }
+            history.append(item)
+            continue
+            
+        rem = db.query(models.Remision).filter(models.Remision.evento_id == e.id).first()
+        if rem:
+            item["tipo"] = "remision"
+            item["detalles"] = {"veterinario_id": rem.veterinario_id}
+            history.append(item)
+            continue
+
+        cv = db.query(models.Compraventa).filter(models.Compraventa.evento_id == e.id).first()
+        if cv:
+            item["tipo"] = "compraventa"
+            item["detalles"] = {"comprador_curp": cv.comprador_curp, "vendedor_curp": cv.vendedor_curp}
+            history.append(item)
+            continue
+            
+        trans = db.query(models.Traslado).filter(models.Traslado.evento_id == e.id).first()
+        if trans:
+            item["tipo"] = "traslado"
+            item["detalles"] = {"predio_anterior_id": trans.predio_anterior_id, "predio_nuevo_id": trans.predio_nuevo_id}
+            history.append(item)
+            continue
+
+        # If no specific type found, it's just a general event
+        history.append(item)
+        
+    return history
+
+def get_bovino_mobilizations(db: Session, bovino_id: str):
+    """
+    Get all mobilizations for a bovino.
+    """
+    return db.query(models.Movilizacion).join(
+        models.MovilizacionBovino, models.Movilizacion.id == models.MovilizacionBovino.movilizacion_id
+    ).filter(
+        models.MovilizacionBovino.bovino_id == bovino_id
+    ).order_by(models.Movilizacion.fecha_solicitud.desc()).all()
 
 def get_eventos_by_user(db: Session, user_id: str, skip: int = 0, limit: int = 100):
     # Get all eventos for all bovinos owned by the user

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from .routers import users, bovinos, files, domicilios, predios, instalaciones
+from .routers import users, bovinos, files, domicilios, predios, instalaciones, movilizaciones, sanidad
 from .routers import eventos_main
 from .routers.eventos import pesos, dietas, vacunaciones, desparasitaciones, laboratorios, compraventas, traslados, enfermedades, tratamientos, remisiones
 from .database import engine
@@ -45,6 +45,8 @@ app.include_router(files.router)
 app.include_router(domicilios.router)
 app.include_router(predios.router)
 app.include_router(instalaciones.router)
+app.include_router(movilizaciones.router)
+app.include_router(sanidad.router)
 
 @app.get("/")
 def read_root():

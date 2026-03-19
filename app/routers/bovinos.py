@@ -15,7 +15,9 @@ router = APIRouter(
 
 def _with_nariz_url(bovino: models.Bovino) -> dict:
     """Convert a Bovino ORM object to a dict with a presigned nariz_url. No parent resolution."""
+    # Ensure properties like instalacion_nombre are included
     data = {c.name: getattr(bovino, c.name) for c in bovino.__table__.columns}
+    data["instalacion_nombre"] = bovino.instalacion_nombre
     data["nariz_url"] = None
     data["madre"] = None
     data["padre"] = None
@@ -66,15 +68,38 @@ def _with_parents(bovino: models.Bovino, db: Session, current_user_id) -> dict:
 @router.get("/", response_model=List[schemas.BovinoResponse])
 async def read_bovinos(skip: int = 0, limit: int = 100,
                        instalacion_id: str = None,
+                       owner_curp: str = None,
+                       status: str = None,
+                       search: str = None,
                        current_user: models.Usuario = Depends(auth.get_current_user),
                        db: Session = Depends(database.get_db)):
+    """
+    Read bovinos with advanced filtering.
+    - If user is admin/superadmin/inspector, they can see everything or filter by owner.
+    - Regular users only see their own bovinos.
+    """
+    is_admin = current_user.rol in [models.RolEnum.administrador, models.RolEnum.superadministrador, models.RolEnum.inspector]
+    
+    # If not admin, they can ONLY see their own bovinos
+    target_user_id = None if is_admin else current_user.id
+    
     if instalacion_id:
         db_instalacion = db.query(models.Instalacion).filter(models.Instalacion.id == instalacion_id).first()
         if db_instalacion is None:
             raise HTTPException(status_code=404, detail="Instalacion not found")
-        if db_instalacion.usuario_id != current_user.id and current_user.rol not in ["administrador", "superadministrador", "inspector"]:
+        if db_instalacion.usuario_id != current_user.id and not is_admin:
             raise HTTPException(status_code=403, detail="Not authorized to view bovinos for this instalacion")
-    bovinos = crud.get_bovinos(db, user_id=current_user.id, skip=skip, limit=limit, instalacion_id=instalacion_id)
+            
+    bovinos = crud.get_bovinos(
+        db, 
+        user_id=target_user_id, 
+        skip=skip, 
+        limit=limit, 
+        instalacion_id=instalacion_id,
+        owner_curp=owner_curp,
+        status=status,
+        search_term=search
+    )
     return [_with_nariz_url(b) for b in bovinos]
 
 @router.get("/search", response_model=schemas.BovinoResponse)
@@ -87,10 +112,16 @@ async def search_bovino(
 ):
     """
     Search for a bovino by arete_barcode, arete_rfid, or nombre.
-    Only accessible to veterinarians.
+    Accessible to veterinarians, administrators, superadministradores, and inspectors.
     """
-    if current_user.rol != 'veterinario':
-        raise HTTPException(status_code=403, detail="Only veterinarians can search for bovinos")
+    is_authorized = current_user.rol in [
+        models.RolEnum.veterinario, 
+        models.RolEnum.administrador, 
+        models.RolEnum.superadministrador, 
+        models.RolEnum.inspector
+    ]
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="Not authorized to search for bovinos")
 
     if not any([arete_barcode, arete_rfid, nombre]):
         raise HTTPException(
@@ -117,7 +148,7 @@ async def read_bovino(bovino_id: str,
     db_bovino = crud.get_bovino(db, bovino_id=bovino_id)
     if db_bovino is None:
         raise HTTPException(status_code=404, detail="Bovino not found")
-    if db_bovino.usuario_id != current_user.id:
+    if db_bovino.usuario_id != current_user.id and current_user.rol not in [models.RolEnum.administrador, models.RolEnum.superadministrador, models.RolEnum.inspector]:
         raise HTTPException(status_code=403, detail="Not authorized to view this bovino")
     return _with_parents(db_bovino, db, current_user.id)
 
@@ -224,3 +255,41 @@ async def upload_nose_photo(
     db.refresh(db_bovino)
 
     return db_bovino
+
+@router.get("/{bovino_id}/historial")
+async def read_bovino_historial(
+    bovino_id: str,
+    current_user: models.Usuario = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get full history for a specific bovino.
+    """
+    db_bovino = crud.get_bovino(db, bovino_id=bovino_id)
+    if db_bovino is None:
+        raise HTTPException(status_code=404, detail="Bovino not found")
+    
+    is_admin = current_user.rol in [models.RolEnum.administrador, models.RolEnum.superadministrador, models.RolEnum.inspector]
+    if db_bovino.usuario_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view this bovino's history")
+        
+    return crud.get_bovino_full_history(db, bovino_id=bovino_id)
+
+@router.get("/{bovino_id}/movilizaciones", response_model=List[schemas.MovilizacionResponse])
+async def read_bovino_movilizaciones(
+    bovino_id: str,
+    current_user: models.Usuario = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get all mobilizations for a specific bovino.
+    """
+    db_bovino = crud.get_bovino(db, bovino_id=bovino_id)
+    if db_bovino is None:
+        raise HTTPException(status_code=404, detail="Bovino not found")
+        
+    is_admin = current_user.rol in [models.RolEnum.administrador, models.RolEnum.superadministrador, models.RolEnum.inspector]
+    if db_bovino.usuario_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view this bovino's mobilizations")
+        
+    return crud.get_bovino_mobilizations(db, bovino_id=bovino_id)

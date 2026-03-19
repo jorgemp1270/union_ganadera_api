@@ -4,6 +4,17 @@ from datetime import date, datetime
 from uuid import UUID
 from enum import Enum
 
+class SanidadAlertType(str, Enum):
+    OUTBREAK = "outbreak"
+    RESTRICTED_ZONE = "restricted_zone"
+    QUARANTINE = "quarantine"
+    VACCINATION_REMINDER = "vaccination_reminder"
+
+class SanidadSeverity(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
 class SexoEnum(str, Enum):
     M = "M"
     F = "F"
@@ -30,6 +41,33 @@ class DocTypeEnum(str, Enum):
     certificado_calidad = "certificado_calidad"
     permiso_cuarentena = "permiso_cuarentena"
     permiso_laboratorio = "permiso_laboratorio"
+    certificado_sanitario = "certificado_sanitario"
+    factura = "factura"
+    documento_compra = "documento_compra"
+
+class TipoMovilizacionEnum(str, Enum):
+    venta = "venta"
+    traslado_interno = "traslado_interno"
+    reproduccion = "reproduccion"
+    subasta_ingreso = "subasta_ingreso"
+    subasta_venta = "subasta_venta"
+    subasta_salida = "subasta_salida"
+    rastro = "rastro"
+    feria = "feria"
+    cuarentena = "cuarentena"
+    exportacion = "exportacion"
+
+class EstadoMovilizacionEnum(str, Enum):
+    DRAFT = "DRAFT"
+    REQUESTED = "REQUESTED"
+    APPROVED = "APPROVED"
+    LOADED = "LOADED"
+    IN_TRANSIT = "IN_TRANSIT"
+    INSPECTED = "INSPECTED"
+    HELD = "HELD"
+    ARRIVED = "ARRIVED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 class DocReviewStatusEnum(str, Enum):
     pendiente = "pendiente"
@@ -158,6 +196,7 @@ class BovinoResponse(BovinoBase):
     # Full BovinoResponse if owned by requesting user, BovinoParentPublic otherwise
     madre: Optional[BovinoParentPublic] = None
     padre: Optional[BovinoParentPublic] = None
+    instalacion_nombre: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -376,6 +415,7 @@ class BovinoListResponse(BaseModel):
     peso_actual: Optional[float] = None
     status: str
     predio_id: Optional[UUID] = None
+    instalacion_nombre: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -547,3 +587,133 @@ class ApproveInstalacionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Movilizacion Eventos
+class MovilizacionEventoResponse(BaseModel):
+    id: UUID
+    movilizacion_id: UUID
+    estado_viejo: Optional[EstadoMovilizacionEnum] = None
+    estado_nuevo: EstadoMovilizacionEnum
+    usuario_id: Optional[UUID] = None
+    fecha: datetime
+    observaciones: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+# Movilizaciones Schemas
+class MovilizacionCreate(BaseModel):
+    origen_id: UUID
+    destino_id: UUID
+    tipo: TipoMovilizacionEnum
+    bovino_ids: list[UUID]
+    transportista_nombre: str
+    placas_vehiculo: str
+    observaciones: Optional[str] = None
+
+class MovilizacionApprove(BaseModel):
+    observaciones: Optional[str] = None
+
+class MovilizacionLoad(BaseModel):
+    placas_vehiculo: Optional[str] = None
+    observaciones: Optional[str] = None
+
+class MovilizacionInspect(BaseModel):
+    aprobar: bool
+    observaciones: Optional[str] = None
+
+class MovilizacionArrive(BaseModel):
+    observaciones: Optional[str] = None
+
+class MovilizacionComplete(BaseModel):
+    observaciones: Optional[str] = None
+
+class MovilizacionResponse(BaseModel):
+    id: UUID
+    solicitante_id: UUID
+    origen_id: UUID
+    destino_id: UUID
+    tipo: TipoMovilizacionEnum
+    estado: EstadoMovilizacionEnum
+    reemo: Optional[str] = None
+    transportista_nombre: str
+    placas_vehiculo: str
+
+    fecha_solicitud: datetime
+    fecha_aprobacion: Optional[datetime] = None
+    fecha_cargue: Optional[datetime] = None
+    fecha_inspeccion: Optional[datetime] = None
+    fecha_llegada: Optional[datetime] = None
+    fecha_completada: Optional[datetime] = None
+    fecha_cancelacion: Optional[datetime] = None
+
+    aprobado_por_id: Optional[UUID] = None
+    inspector_id: Optional[UUID] = None
+
+    documento_exportacion_id: Optional[UUID] = None
+    documento_sanitario_id: Optional[UUID] = None
+    documento_factura_id: Optional[UUID] = None
+    documento_compra_id: Optional[UUID] = None
+
+    observaciones: Optional[str] = None
+
+    # We can include bovine ids
+    bovinos: list[BovinoListResponse] = []
+    eventos: list[MovilizacionEventoResponse] = []
+
+    class Config:
+        from_attributes = True
+
+# Validacion Documentos Movilizacion
+class DocumentoStatusMovilizacionResponse(BaseModel):
+    documento_tipo: str
+    requerido: bool
+    presente: bool
+    descripcion: str
+
+class ValidacionDocumentosMovilizacionResponse(BaseModel):
+    movilizacion_id: UUID
+    documentos_totales_requeridos: int
+    documentos_presentes: int
+    documentos_faltantes: list[DocumentoStatusMovilizacionResponse]
+    validacion_completa: bool
+# Sanidad Schemas
+class SanidadAlert(BaseModel):
+    type: SanidadAlertType
+    severity: SanidadSeverity
+    title: str
+    description: str
+    location: Optional[str] = None
+    date: datetime
+    active: bool = True
+
+class SanidadHistoryItem(BaseModel):
+    id: UUID
+    date: datetime
+    type: str # 'peso', 'vacunacion', 'enfermedad', etc.
+    title: str
+    details: dict
+    observaciones: Optional[str] = None
+    veterinario: Optional[str] = None
+
+class SanidadDashboardResponse(BaseModel):
+    alerts: list[SanidadAlert]
+    quarantine_count: int
+    active_outbreaks: int
+    recent_vaccinations_count: int
+    total_active_cases: int
+
+class SanidadBovinoHistoryResponse(BaseModel):
+    bovino_id: UUID
+    nombre: Optional[str]
+    arete_barcode: Optional[str]
+    history: list[SanidadHistoryItem]
+
+class SanidadQuarantineResponse(BaseModel):
+    bovino_id: UUID
+    arete_barcode: Optional[str]
+    nombre: Optional[str]
+    instalacion_id: UUID
+    instalacion_nombre: str
+    fecha_inicio: datetime
+    motivo: str

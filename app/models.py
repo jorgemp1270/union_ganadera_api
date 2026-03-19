@@ -40,6 +40,33 @@ class DocTypeEnum(str, enum.Enum):
     certificado_calidad = "certificado_calidad"
     permiso_cuarentena = "permiso_cuarentena"
     permiso_laboratorio = "permiso_laboratorio"
+    certificado_sanitario = "certificado_sanitario"
+    factura = "factura"
+    documento_compra = "documento_compra"
+
+class TipoMovilizacionEnum(str, enum.Enum):
+    venta = "venta"
+    traslado_interno = "traslado_interno"
+    reproduccion = "reproduccion"
+    subasta_ingreso = "subasta_ingreso"
+    subasta_venta = "subasta_venta"
+    subasta_salida = "subasta_salida"
+    rastro = "rastro"
+    feria = "feria"
+    cuarentena = "cuarentena"
+    exportacion = "exportacion"
+
+class EstadoMovilizacionEnum(str, enum.Enum):
+    DRAFT = "DRAFT"
+    REQUESTED = "REQUESTED"
+    APPROVED = "APPROVED"
+    LOADED = "LOADED"
+    IN_TRANSIT = "IN_TRANSIT"
+    INSPECTED = "INSPECTED"
+    HELD = "HELD"
+    ARRIVED = "ARRIVED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 class DocReviewStatusEnum(str, enum.Enum):
     pendiente = "pendiente"
@@ -178,6 +205,13 @@ class Bovino(Base):
     usuario = relationship("Usuario", back_populates="bovinos", foreign_keys=[usuario_id])
     eventos = relationship("Evento", back_populates="bovino")
     instalacion = relationship("Instalacion", back_populates="bovinos")
+
+    madre = relationship("Bovino", remote_side=[id], foreign_keys=[madre_id])
+    padre = relationship("Bovino", remote_side=[id], foreign_keys=[padre_id])
+
+    @property
+    def instalacion_nombre(self):
+        return self.instalacion.nombre if self.instalacion else None
 
 class Predio(Base):
     __tablename__ = "predios"
@@ -395,3 +429,72 @@ class RenovacionUPP(Base):
     instalacion = relationship("Instalacion", back_populates="renovaciones")
     solicitante = relationship("Usuario", foreign_keys=[solicitada_por])
     aprobador = relationship("Usuario", foreign_keys=[aprobada_por])
+
+class Movilizacion(Base):
+    __tablename__ = "movilizaciones"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    solicitante_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    origen_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id"), nullable=False)
+    destino_id = Column(UUID(as_uuid=True), ForeignKey("instalaciones.id"), nullable=False)
+    tipo = Column(Enum(TipoMovilizacionEnum), nullable=False)
+    estado = Column(Enum(EstadoMovilizacionEnum), default=EstadoMovilizacionEnum.DRAFT)
+    reemo = Column(String(50), unique=True, nullable=True)
+    transportista_nombre = Column(String(150), nullable=False)
+    placas_vehiculo = Column(String(20), nullable=False)
+
+    fecha_solicitud = Column(DateTime(timezone=True), server_default=func.now())
+    fecha_aprobacion = Column(DateTime(timezone=True), nullable=True)
+    fecha_cargue = Column(DateTime(timezone=True), nullable=True)
+    fecha_inspeccion = Column(DateTime(timezone=True), nullable=True)
+    fecha_llegada = Column(DateTime(timezone=True), nullable=True)
+    fecha_completada = Column(DateTime(timezone=True), nullable=True)
+    fecha_cancelacion = Column(DateTime(timezone=True), nullable=True)
+
+    aprobado_por_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    inspector_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+
+    documento_exportacion_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True)
+    documento_sanitario_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True)
+    documento_factura_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True)
+    documento_compra_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True)
+
+    observaciones = Column(Text, nullable=True)
+
+    # Relationships
+    solicitante = relationship("Usuario", foreign_keys=[solicitante_id])
+    origen = relationship("Instalacion", foreign_keys=[origen_id])
+    destino = relationship("Instalacion", foreign_keys=[destino_id])
+    aprobado_por = relationship("Usuario", foreign_keys=[aprobado_por_id])
+    inspector = relationship("Usuario", foreign_keys=[inspector_id])
+    
+    documento_exportacion = relationship("Documento", foreign_keys=[documento_exportacion_id])
+    documento_sanitario = relationship("Documento", foreign_keys=[documento_sanitario_id])
+    documento_factura = relationship("Documento", foreign_keys=[documento_factura_id])
+    documento_compra = relationship("Documento", foreign_keys=[documento_compra_id])
+
+    bovinos = relationship("MovilizacionBovino", back_populates="movilizacion", cascade="all, delete-orphan")
+    eventos = relationship("MovilizacionEvento", back_populates="movilizacion", cascade="all, delete-orphan")
+
+class MovilizacionBovino(Base):
+    __tablename__ = "movilizacion_bovinos"
+
+    movilizacion_id = Column(UUID(as_uuid=True), ForeignKey("movilizaciones.id", ondelete="CASCADE"), primary_key=True)
+    bovino_id = Column(UUID(as_uuid=True), ForeignKey("bovinos.id", ondelete="CASCADE"), primary_key=True)
+
+    movilizacion = relationship("Movilizacion", back_populates="bovinos")
+    bovino = relationship("Bovino")
+
+class MovilizacionEvento(Base):
+    __tablename__ = "movilizacion_eventos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    movilizacion_id = Column(UUID(as_uuid=True), ForeignKey("movilizaciones.id", ondelete="CASCADE"), nullable=False)
+    estado_viejo = Column(Enum(EstadoMovilizacionEnum), nullable=True)
+    estado_nuevo = Column(Enum(EstadoMovilizacionEnum), nullable=False)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    fecha = Column(DateTime(timezone=True), server_default=func.now())
+    observaciones = Column(Text, nullable=True)
+
+    movilizacion = relationship("Movilizacion", back_populates="eventos")
+    usuario = relationship("Usuario", foreign_keys=[usuario_id])
